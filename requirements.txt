@@ -1,6 +1,7 @@
-aiomysql
-python-dotenv
-
-# Added for API
 fastapi
 uvicorn
+sqlalchemy[asyncio]>=1.4
+asyncpg
+pydantic
+python-dotenv
+httpx

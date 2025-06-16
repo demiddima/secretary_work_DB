@@ -1,9 +1,14 @@
+from fastapi.responses import JSONResponse
+from fastapi import Request
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import init_db, AsyncSessionLocal
 from . import crud
 from pydantic import BaseModel
 from typing import Optional, List
+import logging
+import traceback
+import httpx
 
 # Pydantic schemas
 class ChatModel(BaseModel):
@@ -31,6 +36,12 @@ class AlgorithmProgressModel(BaseModel):
     advanced_completed: bool
 
 app = FastAPI(title="DB Service API")
+
+# Configure logging
+logging.basicConfig(
+    level=settings.LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 @app.on_event("startup")
 async def on_startup():
@@ -141,3 +152,23 @@ async def set_advanced(user_id: int, completed: bool, session: AsyncSession = De
 async def clear_progress(user_id: int, session: AsyncSession = Depends(get_session)):
     await crud.clear_user_data(session, user_id)
     return {"status": "cleared"}
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """
+    Handle uncaught exceptions, log and notify via Telegram
+    """
+    logger = logging.getLogger('db_service')
+    tb = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    msg = f"Exception in request {request.method} {request.url}\n\n{tb}"
+    # Log the error
+    logger.error(msg)
+    # Send to Telegram channel
+    token = settings.TELEGRAM_BOT_TOKEN
+    chat_id = settings.LOG_CHANNEL_ID
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": msg}
+        )
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
