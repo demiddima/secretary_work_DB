@@ -1,0 +1,16 @@
+from pydantic import BaseSettings, Field
+
+class Settings(BaseSettings):
+    DB_HOST: str = Field(..., env='DB_HOST')
+    DB_PORT: int = Field(5432, env='DB_PORT')
+    DB_USER: str = Field(..., env='DB_USER')
+    DB_PASSWORD: str = Field(..., env='DB_PASSWORD')
+    DB_NAME: str = Field(..., env='DB_NAME')
+    POOL_MIN_SIZE: int = Field(1, env='POOL_MIN_SIZE')
+    POOL_MAX_SIZE: int = Field(10, env='POOL_MAX_SIZE')
+
+    class Config:
+        env_file = '.env'
+        env_file_encoding = 'utf-8'
+
+settings = Settings()
