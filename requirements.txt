@@ -1,0 +1,6 @@
+aiomysql
+python-dotenv
+
+# Added for API
+fastapi
+uvicorn

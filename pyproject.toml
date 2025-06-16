@@ -12,6 +12,8 @@ dependencies = [
   "asyncpg",
   "pydantic",
   "python-dotenv"
+  "fastapi",
+  "uvicorn",
 ]
 
 [build-system]

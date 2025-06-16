@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+ENV PYTHONPATH=/app/src
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -18,6 +19,6 @@ RUN pip install --upgrade pip \
 COPY . .
 
 # Expose port for health check
-EXPOSE 8080
+EXPOSE 8000
 
-CMD ["python", "-u", "main.py"]
+CMD ["uvicorn", "db_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
