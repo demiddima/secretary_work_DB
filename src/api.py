@@ -1,6 +1,5 @@
 from fastapi.responses import JSONResponse
-from fastapi import Request
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import Request, FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import init_db, AsyncSessionLocal
 from . import crud
@@ -10,6 +9,7 @@ from typing import Optional, List
 import logging
 import traceback
 import httpx
+import asyncio
 
 # Pydantic schemas
 class ChatModel(BaseModel):
@@ -154,8 +154,19 @@ async def clear_progress(user_id: int, session: AsyncSession = Depends(get_sessi
     await crud.clear_user_data(session, user_id)
     return {"status": "cleared"}
 
+# Health check with database verification
+@app.get("/health")
+async def health():
+    try:
+        async with AsyncSessionLocal() as session:
+            await session.execute("SELECT 1")
+        return {"status": "ok"}
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+
+# Global exception handler
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc):
     """
     Handle uncaught exceptions, log and notify via Telegram
     """

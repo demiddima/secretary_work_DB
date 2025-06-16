@@ -1,10 +1,21 @@
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
     Chat, User, UserMembership, InviteLink, UserAlgorithmProgress
 )
 
+# Retry configuration: up to 5 attempts, exponential backoff
+retry_db = retry(
+    reraise=True,
+    retry=retry_if_exception_type(OperationalError),
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+)
+
 # ---- Chats ----
+@retry_db
 async def upsert_chat(session: AsyncSession, chat_id: int, title: str, type_: str):
     stmt = select(Chat).where(Chat.id == chat_id)
     res = await session.execute(stmt)
@@ -18,40 +29,48 @@ async def upsert_chat(session: AsyncSession, chat_id: int, title: str, type_: st
     await session.commit()
     return chat
 
+@retry_db
 async def delete_chat(session: AsyncSession, chat_id: int):
     await session.execute(delete(Chat).where(Chat.id == chat_id))
     await session.commit()
 
+@retry_db
 async def get_all_chats(session: AsyncSession):
     res = await session.execute(select(Chat.id))
     return [row[0] for row in res.all()]
 
 # ---- Users ----
+@retry_db
 async def create_user(session: AsyncSession, id: int, username: str = None, full_name: str = None):
     user = User(id=id, username=username, full_name=full_name)
     session.add(user)
     await session.commit()
     return user
 
+@retry_db
 async def get_user(session: AsyncSession, id: int):
     res = await session.execute(select(User).where(User.id == id))
     return res.scalar_one_or_none()
 
+@retry_db
 async def update_user(session: AsyncSession, id: int, **fields):
     await session.execute(update(User).where(User.id == id).values(**fields))
     await session.commit()
 
+@retry_db
 async def delete_user(session: AsyncSession, id: int):
     await session.execute(delete(User).where(User.id == id))
     await session.commit()
 
 # ---- Memberships ----
+@retry_db
 async def add_user_to_chat(session: AsyncSession, user_id: int, chat_id: int):
     membership = UserMembership(user_id=user_id, chat_id=chat_id)
     session.add(membership)
     await session.commit()
     return membership
 
+@retry_db
 async def remove_user_from_chat(session: AsyncSession, user_id: int, chat_id: int):
     await session.execute(
         delete(UserMembership)
@@ -61,6 +80,7 @@ async def remove_user_from_chat(session: AsyncSession, user_id: int, chat_id: in
     await session.commit()
 
 # ---- Invite Links ----
+@retry_db
 async def save_invite_link(
     session: AsyncSession, user_id: int, chat_id: int,
     invite_link: str, created_at, expires_at
@@ -74,6 +94,7 @@ async def save_invite_link(
     await session.commit()
     return link
 
+@retry_db
 async def get_valid_invite_links(session: AsyncSession, user_id: int):
     now = func.now()
     res = await session.execute(
@@ -83,6 +104,7 @@ async def get_valid_invite_links(session: AsyncSession, user_id: int):
     )
     return res.scalars().all()
 
+@retry_db
 async def delete_invite_links(session: AsyncSession, user_id: int):
     await session.execute(
         delete(InviteLink).where(InviteLink.user_id == user_id)
@@ -90,6 +112,7 @@ async def delete_invite_links(session: AsyncSession, user_id: int):
     await session.commit()
 
 # ---- Algorithm Progress ----
+@retry_db
 async def get_user_step(session: AsyncSession, user_id: int):
     res = await session.execute(
         select(UserAlgorithmProgress.current_step)
@@ -97,6 +120,7 @@ async def get_user_step(session: AsyncSession, user_id: int):
     )
     return res.scalar_one_or_none()
 
+@retry_db
 async def set_user_step(session: AsyncSession, user_id: int, step: int):
     obj = await session.get(UserAlgorithmProgress, user_id)
     if obj:
@@ -107,6 +131,7 @@ async def set_user_step(session: AsyncSession, user_id: int, step: int):
     await session.commit()
     return obj
 
+@retry_db
 async def get_basic_completed(session: AsyncSession, user_id: int):
     res = await session.execute(
         select(UserAlgorithmProgress.basic_completed)
@@ -114,6 +139,7 @@ async def get_basic_completed(session: AsyncSession, user_id: int):
     )
     return res.scalar_one_or_none()
 
+@retry_db
 async def set_basic_completed(session: AsyncSession, user_id: int, completed: bool):
     obj = await session.get(UserAlgorithmProgress, user_id)
     if obj:
@@ -124,6 +150,7 @@ async def set_basic_completed(session: AsyncSession, user_id: int, completed: bo
     await session.commit()
     return obj
 
+@retry_db
 async def get_advanced_completed(session: AsyncSession, user_id: int):
     res = await session.execute(
         select(UserAlgorithmProgress.advanced_completed)
@@ -131,6 +158,7 @@ async def get_advanced_completed(session: AsyncSession, user_id: int):
     )
     return res.scalar_one_or_none()
 
+@retry_db
 async def set_advanced_completed(session: AsyncSession, user_id: int, completed: bool):
     obj = await session.get(UserAlgorithmProgress, user_id)
     if obj:
@@ -141,6 +169,7 @@ async def set_advanced_completed(session: AsyncSession, user_id: int, completed:
     await session.commit()
     return obj
 
+@retry_db
 async def clear_user_data(session: AsyncSession, user_id: int):
     await session.execute(
         delete(UserAlgorithmProgress).where(UserAlgorithmProgress.user_id == user_id)
