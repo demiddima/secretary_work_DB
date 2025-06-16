@@ -6,6 +6,7 @@ from .database import init_db, AsyncSessionLocal
 from . import crud
 from pydantic import BaseModel
 from typing import Optional, List
+from .config import settings
 import logging
 import traceback
 import httpx

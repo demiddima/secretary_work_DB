@@ -1,24 +1,29 @@
-FROM python:3.11-slim
+# Builder stage
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
-ENV PYTHONPATH=/app/src
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-         build-essential \
-         default-libmysqlclient-dev \
-         libssl-dev \
-         libffi-dev \
-         python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN apt-get update && apt-get install -y build-essential libmysqlclient-dev && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml requirements.txt ./
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
-COPY . .
+# Final stage
+FROM python:3.11-slim
 
-# Expose port for health check
+# Create non-root user
+RUN addgroup --system app && adduser --system --ingroup app app
+
+USER app
+WORKDIR /app
+
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir /wheels/*.whl
+
+COPY --chown=app:app . .
+
 EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "db_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]

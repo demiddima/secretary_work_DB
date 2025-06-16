@@ -4,7 +4,7 @@ from .config import settings
 
 # Строка подключения к базе данных
 DATABASE_URL = (
-    f"postgresql+asyncpg://{settings.DB_USER}:{settings.DB_PASSWORD}"
+    f"mysql+aiomysql://{settings.DB_USER}:{settings.DB_PASSWORD}"
     f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
 )
 
@@ -13,6 +13,8 @@ engine = create_async_engine(
     DATABASE_URL,
     pool_size=settings.POOL_MIN_SIZE,
     max_overflow=settings.POOL_MAX_SIZE,
+    pool_pre_ping=True,
+    echo=(settings.LOG_LEVEL=='DEBUG'),
 )
 
 AsyncSessionLocal = sessionmaker(
