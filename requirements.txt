@@ -5,3 +5,4 @@ aiomysql
 pydantic
 python-dotenv
 httpx
+pydantic-settings

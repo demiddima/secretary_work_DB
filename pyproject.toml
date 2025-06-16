@@ -15,6 +15,7 @@ dependencies = [
   "pydantic",
   "python-dotenv",
   "httpx",
+  "pydantic-settings"
 ]
 
 [build-system]

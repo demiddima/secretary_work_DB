@@ -1,4 +1,6 @@
-from pydantic import BaseSettings, Field
+# src/config.py
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 class Settings(BaseSettings):
     DB_HOST: str = Field(..., env='DB_HOST')
@@ -12,8 +14,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field('INFO', env='LOG_LEVEL')
     TELEGRAM_BOT_TOKEN: str = Field(..., env='TELEGRAM_BOT_TOKEN')
     LOG_CHANNEL_ID: int = Field(..., env='LOG_CHANNEL_ID')
+
     class Config:
         env_file = '.env'
         env_file_encoding = 'utf-8'
 
+# тут создаётся единственный объект настроек
 settings = Settings()

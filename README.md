@@ -20,8 +20,8 @@
 ## Использование
 
 ```python
-from db_service.database import init_db, AsyncSessionLocal
-from db_service.crud import upsert_chat, create_user
+from src.database import init_db, AsyncSessionLocal
+from src.crud import upsert_chat, create_user
 
 async def main():
     await init_db()
