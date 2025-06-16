@@ -8,12 +8,13 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "sqlalchemy>=1.4",
-  "asyncpg",
-  "pydantic",
-  "python-dotenv"
   "fastapi",
   "uvicorn",
+  "sqlalchemy[asyncio]>=1.4",
+  "aiomysql",
+  "pydantic",
+  "python-dotenv",
+  "httpx",
 ]
 
 [build-system]

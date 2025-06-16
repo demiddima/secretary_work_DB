@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 sqlalchemy[asyncio]>=1.4
-asyncpg
+aiomysql
 pydantic
 python-dotenv
 httpx

@@ -154,21 +154,16 @@ async def clear_progress(user_id: int, session: AsyncSession = Depends(get_sessi
     return {"status": "cleared"}
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
+async def global_exception_handler(request: Request, exc):
     """
-    Handle uncaught exceptions, log and notify via Telegram
+    Handle uncaught exceptions: log at CRITICAL level, let TelegramHandler send notification.
     """
-    logger = logging.getLogger('db_service')
-    tb = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    msg = f"Exception in request {request.method} {request.url}\n\n{tb}"
-    # Log the error
-    logger.error(msg)
-    # Send to Telegram channel
-    token = settings.TELEGRAM_BOT_TOKEN
-    chat_id = settings.LOG_CHANNEL_ID
-    async with httpx.AsyncClient() as client:
-        await client.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": msg}
-        )
+    if isinstance(exc, HTTPException):
+        raise exc
+    logger = logging.getLogger("db_service")
+    logger.critical("Unhandled exception", exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
