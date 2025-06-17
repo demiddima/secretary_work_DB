@@ -16,7 +16,9 @@ dependencies = [
   "python-dotenv",
   "httpx",
   "pydantic-settings",
-  "tenacity"
+  "tenacity",
+  "pymysql",
+  "alembic"
 ]
 
 [build-system]

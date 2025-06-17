@@ -1,6 +1,17 @@
-# Docker ignore
-__pycache__/
-*.pyc
+# Git
+.git
+.gitignore
+
+# Виртуальная среда и логи
 venv/
 .env
 db/
+
+# Временные файлы Python
+__pycache__/
+*.py[cod]
+*.py
+
+# Тесты, документация, локальные скрипты (если не нужны в образе)
+tests/
+docs/
