@@ -16,7 +16,7 @@ class User(Base):
     __tablename__ = 'users'
 
     id = Column(BigInteger, primary_key=True)
-    username = Column(String(255), unique=True)
+    username = Column(String(255))
     full_name = Column(String(255))
 
 class UserMembership(Base):
@@ -30,8 +30,8 @@ class InviteLink(Base):
     __tablename__ = 'invite_links'
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False)
-    chat_id = Column(BigInteger, ForeignKey('chats.id'), nullable=False)
+    user_id = Column(BigInteger)
+    chat_id = Column(BigInteger)
     invite_link = Column(String(512), nullable=False)
     created_at = Column(DateTime, nullable=False)
     expires_at = Column(DateTime, nullable=False)

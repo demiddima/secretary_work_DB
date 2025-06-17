@@ -52,7 +52,7 @@ async def get_user(session: AsyncSession, id: int):
     res = await session.execute(select(User).where(User.id == id))
     return res.scalar_one_or_none()
 
-@retry_db
+@retry_dbё
 async def update_user(session: AsyncSession, id: int, **fields):
     await session.execute(update(User).where(User.id == id).values(**fields))
     await session.commit()
