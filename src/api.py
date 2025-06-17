@@ -10,18 +10,15 @@ import logging
 import traceback
 import httpx
 import asyncio
+from fastapi.responses import PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # ---- Middleware для отключения access log на "/" ----
 class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if request.url.path == "/":
-            uvicorn_access_logger = logging.getLogger("uvicorn.access")
-            previous_level = uvicorn_access_logger.level
-            uvicorn_access_logger.setLevel(logging.WARNING)
-            response = await call_next(request)
-            uvicorn_access_logger.setLevel(previous_level)
-            return response
+            # Заглушка для "/" — без логов, но с ответом
+            return PlainTextResponse("OK", status_code=200)
         return await call_next(request)
 
 app = FastAPI(title="DB Service API")
