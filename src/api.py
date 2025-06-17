@@ -35,6 +35,13 @@ class AlgorithmProgressModel(BaseModel):
     current_step: int
     basic_completed: bool
     advanced_completed: bool
+    
+class InviteLinkIn(BaseModel):
+    user_id: int
+    chat_id: int
+    invite_link: str
+    created_at: str
+    expires_at: str
 
 app = FastAPI(title="DB Service API")
 
@@ -68,9 +75,9 @@ async def delete_chat(chat_id: int, session: AsyncSession = Depends(get_session)
     return {"status": "deleted"}
 
 # Users endpoints
-@app.post("/users/", response_model=UserModel)
-async def create_user(user: UserModel, session: AsyncSession = Depends(get_session)):
-    res = await crud.create_user(session, user.id, user.username, user.full_name)
+@app.put("/users/{user_id}/upsert", response_model=UserModel)
+async def upsert_user(user_id: int, user: UserModel, session: AsyncSession = Depends(get_session)):
+    res = await crud.upsert_user(session, user_id, user.username, user.full_name)
     return UserModel(id=res.id, username=res.username, full_name=res.full_name)
 
 @app.get("/users/{user_id}", response_model=UserModel)
@@ -91,11 +98,11 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
     await crud.delete_user(session, user_id)
     return {"status": "deleted"}
 
-# Memberships endpoints
-@app.post("/memberships/")
-async def add_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
-    await crud.add_user_to_chat(session, user_id, chat_id)
-    return {"status": "added"}
+# Memberships endpoints — теперь upsert!
+@app.post("/memberships/", status_code=200)
+async def upsert_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
+    await crud.upsert_user_to_chat(session, user_id, chat_id)
+    return {"status": "ok"}
 
 @app.delete("/memberships/")
 async def remove_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
@@ -104,8 +111,15 @@ async def remove_membership(user_id: int, chat_id: int, session: AsyncSession = 
 
 # Invite links endpoints
 @app.post("/invite_links/", response_model=InviteLinkModel)
-async def save_invite_link(user_id: int, chat_id: int, invite_link: str, created_at: str, expires_at: str, session: AsyncSession = Depends(get_session)):
-    res = await crud.save_invite_link(session, user_id, chat_id, invite_link, created_at, expires_at)
+async def save_invite_link(invite_link: InviteLinkIn, session: AsyncSession = Depends(get_session)):
+    res = await crud.save_invite_link(
+        session,
+        invite_link.user_id,
+        invite_link.chat_id,
+        invite_link.invite_link,
+        invite_link.created_at,
+        invite_link.expires_at,
+    )
     return InviteLinkModel(
         id=res.id, user_id=res.user_id, chat_id=res.chat_id,
         invite_link=res.invite_link, created_at=str(res.created_at), expires_at=str(res.expires_at)

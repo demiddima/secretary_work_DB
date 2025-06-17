@@ -41,9 +41,16 @@ async def get_all_chats(session: AsyncSession):
 
 # ---- Users ----
 @retry_db
-async def create_user(session: AsyncSession, id: int, username: str = None, full_name: str = None):
-    user = User(id=id, username=username, full_name=full_name)
-    session.add(user)
+async def upsert_user(session: AsyncSession, id: int, username: str = None, full_name: str = None):
+    stmt = select(User).where(User.id == id)
+    res = await session.execute(stmt)
+    user = res.scalar_one_or_none()
+    if user:
+        user.username = username
+        user.full_name = full_name
+    else:
+        user = User(id=id, username=username, full_name=full_name)
+        session.add(user)
     await session.commit()
     return user
 
@@ -52,7 +59,7 @@ async def get_user(session: AsyncSession, id: int):
     res = await session.execute(select(User).where(User.id == id))
     return res.scalar_one_or_none()
 
-@retry_dbё
+@retry_db
 async def update_user(session: AsyncSession, id: int, **fields):
     await session.execute(update(User).where(User.id == id).values(**fields))
     await session.commit()
@@ -64,10 +71,18 @@ async def delete_user(session: AsyncSession, id: int):
 
 # ---- Memberships ----
 @retry_db
-async def add_user_to_chat(session: AsyncSession, user_id: int, chat_id: int):
-    membership = UserMembership(user_id=user_id, chat_id=chat_id)
-    session.add(membership)
-    await session.commit()
+async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int):
+    stmt = select(UserMembership).where(
+        UserMembership.user_id == user_id,
+        UserMembership.chat_id == chat_id
+    )
+    res = await session.execute(stmt)
+    membership = res.scalar_one_or_none()
+    if not membership:
+        membership = UserMembership(user_id=user_id, chat_id=chat_id)
+        session.add(membership)
+        await session.commit()
+    # если уже есть — ничего не делаем
     return membership
 
 @retry_db
