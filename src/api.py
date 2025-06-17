@@ -10,6 +10,28 @@ import logging
 import traceback
 import httpx
 import asyncio
+from starlette.middleware.base import BaseHTTPMiddleware
+
+# ---- Middleware для отключения access log на "/" ----
+class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if request.url.path == "/":
+            uvicorn_access_logger = logging.getLogger("uvicorn.access")
+            previous_level = uvicorn_access_logger.level
+            uvicorn_access_logger.setLevel(logging.WARNING)
+            response = await call_next(request)
+            uvicorn_access_logger.setLevel(previous_level)
+            return response
+        return await call_next(request)
+
+app = FastAPI(title="DB Service API")
+app.add_middleware(SuppressRootAccessLogMiddleware)
+
+# Configure logging
+logging.basicConfig(
+    level=settings.LOG_LEVEL,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Pydantic schemas
 class ChatModel(BaseModel):
@@ -35,7 +57,7 @@ class AlgorithmProgressModel(BaseModel):
     current_step: int
     basic_completed: bool
     advanced_completed: bool
-    
+
 class InviteLinkIn(BaseModel):
     user_id: int
     chat_id: int
@@ -43,17 +65,13 @@ class InviteLinkIn(BaseModel):
     created_at: str
     expires_at: str
 
-app = FastAPI(title="DB Service API")
-
-# Configure logging
-logging.basicConfig(
-    level=settings.LOG_LEVEL,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
 @app.on_event("startup")
 async def on_startup():
     await init_db()
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
 
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
