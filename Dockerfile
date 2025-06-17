@@ -13,7 +13,7 @@ RUN apt-get update \
 WORKDIR /app
 
 # Копируем файлы зависимостей и устанавливаем
-COPY requirements.txt pyproject.toml ./
+COPY requirements.txt ./
 RUN pip install --upgrade pip \
  && pip install --no-cache-dir -r requirements.txt
 
