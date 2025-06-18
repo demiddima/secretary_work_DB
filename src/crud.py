@@ -3,7 +3,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import (
-    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress
+    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting
 )
 
 # Retry configuration: up to 5 attempts, exponential backoff
@@ -190,3 +190,32 @@ async def clear_user_data(session: AsyncSession, user_id: int):
         delete(UserAlgorithmProgress).where(UserAlgorithmProgress.user_id == user_id)
     )
     await session.commit()
+
+@retry_db
+async def get_cleanup_cron(session: AsyncSession):
+    res = await session.execute(select(Setting.cleanup_cron).where(Setting.id == 1))
+    return res.scalar_one_or_none() or '0 3 * * 6'
+
+@retry_db
+async def set_cleanup_cron(session: AsyncSession, cron_str: str):
+    obj = await session.get(Setting, 1)
+    if obj:
+        obj.cleanup_cron = cron_str
+    else:
+        obj = Setting(id=1, cleanup_cron=cron_str)
+        session.add(obj)
+    await session.commit()
+    return obj
+
+@retry_db
+async def cleanup_orphan_users(session: AsyncSession):
+    # Все юзеры, у которых нет подписок
+    subq = select(UserMembership.user_id)
+    res = await session.execute(
+        select(User.id).where(~User.id.in_(subq))
+    )
+    user_ids = [row[0] for row in res.all()]
+    if user_ids:
+        await session.execute(delete(User).where(User.id.in_(user_ids)))
+        await session.commit()
+    return user_ids

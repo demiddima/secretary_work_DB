@@ -9,3 +9,5 @@ pydantic-settings
 tenacity
 alembic
 pymysql
+apscheduler
+pytz

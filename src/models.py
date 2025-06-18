@@ -47,3 +47,9 @@ class UserAlgorithmProgress(Base):
     basic_completed = Column(Boolean, default=False, nullable=False)
     advanced_completed = Column(Boolean, default=False, nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    
+class Setting(Base):
+    __tablename__ = 'settings'
+    id = Column(BigInteger, primary_key=True)
+    cleanup_cron = Column(String(100), nullable=False)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

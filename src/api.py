@@ -1,4 +1,4 @@
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi import Request, FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from .database import init_db, AsyncSessionLocal
@@ -10,8 +10,12 @@ import logging
 import traceback
 import httpx
 import asyncio
-from fastapi.responses import PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# NEW: APScheduler для фоновых задач
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+import pytz
 
 # ---- Middleware для отключения access log на "/" ----
 class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
@@ -29,6 +33,9 @@ logging.basicConfig(
     level=settings.LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
+
+# APScheduler (глобальный объект)
+scheduler = AsyncIOScheduler()
 
 # Pydantic schemas
 class ChatModel(BaseModel):
@@ -65,6 +72,27 @@ class InviteLinkIn(BaseModel):
 @app.on_event("startup")
 async def on_startup():
     await init_db()
+
+    # ------ APScheduler: запуск очистки по расписанию ------
+    # Берём cron-строку из таблицы settings (через crud)
+    async with AsyncSessionLocal() as session:
+        cron_str = await crud.get_cleanup_cron(session)
+    # Europe/Moscow — для соответствия МСК
+    trigger = CronTrigger.from_crontab(cron_str, timezone=pytz.timezone('Europe/Moscow'))
+
+    # Сама задача: вызывает crud.cleanup_orphan_users()
+    async def scheduled_cleanup():
+        async with AsyncSessionLocal() as session:
+            deleted = await crud.cleanup_orphan_users(session)
+            if deleted:
+                logging.info(f"[CLEANUP] Deleted orphan users: {deleted}")
+            else:
+                logging.info("[CLEANUP] No orphan users found.")
+
+    # Запускаем задачу в APScheduler
+    scheduler.add_job(scheduled_cleanup, trigger)
+    scheduler.start()
+    logging.info(f"[CLEANUP] Orphan cleanup scheduled: {cron_str} (Europe/Moscow)")
 
 @app.get("/")
 async def root():
