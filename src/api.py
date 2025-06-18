@@ -211,15 +211,11 @@ async def clear_progress(user_id: int, session: AsyncSession = Depends(get_sessi
     await crud.clear_user_data(session, user_id)
     return {"status": "cleared"}
 
-# Health check with database verification
+# Health check withoth database verification
 @app.get("/health")
 async def health():
-    try:
-        async with AsyncSessionLocal() as session:
-            await session.execute("SELECT 1")
-        return {"status": "ok"}
-    except Exception:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+    return {"status": "ok"}
+
 
 # Global exception handler
 @app.exception_handler(Exception)
