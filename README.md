@@ -29,3 +29,4 @@ async def main():
         await upsert_chat(session, 12345, "Test Chat", "group")
         await create_user(session, 67890, username="john_doe", full_name="John Doe")
 ```
+Затуп на серваке
