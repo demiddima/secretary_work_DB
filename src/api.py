@@ -11,6 +11,7 @@ import traceback
 import httpx
 import asyncio
 from starlette.middleware.base import BaseHTTPMiddleware
+from sqlalchemy.exc import IntegrityError
 
 # NEW: APScheduler для фоновых задач
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -36,6 +37,15 @@ logging.basicConfig(
 
 # APScheduler (глобальный объект)
 scheduler = AsyncIOScheduler()
+
+# Перехват IntegrityError для централизованной обработки
+@app.exception_handler(IntegrityError)
+async def handle_integrity_error(request: Request, exc: IntegrityError):
+    logging.getLogger("db_service").warning(f"IntegrityError: {exc.orig}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": "Ошибка целостности данных: проверьте параметры"}
+    )
 
 # Pydantic schemas
 class ChatModel(BaseModel):
@@ -74,13 +84,10 @@ async def on_startup():
     await init_db()
 
     # ------ APScheduler: запуск очистки по расписанию ------
-    # Берём cron-строку из таблицы settings (через crud)
     async with AsyncSessionLocal() as session:
         cron_str = await crud.get_cleanup_cron(session)
-    # Europe/Moscow — для соответствия МСК
     trigger = CronTrigger.from_crontab(cron_str, timezone=pytz.timezone('Europe/Moscow'))
 
-    # Сама задача: вызывает crud.cleanup_orphan_users()
     async def scheduled_cleanup():
         async with AsyncSessionLocal() as session:
             deleted = await crud.cleanup_orphan_users(session)
@@ -89,7 +96,6 @@ async def on_startup():
             else:
                 logging.info("[CLEANUP] No orphan users found.")
 
-    # Запускаем задачу в APScheduler
     scheduler.add_job(scheduled_cleanup, trigger)
     scheduler.start()
     logging.info(f"[CLEANUP] Orphan cleanup scheduled: {cron_str} (Europe/Moscow)")
@@ -141,10 +147,15 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
     await crud.delete_user(session, user_id)
     return {"status": "deleted"}
 
-# Memberships endpoints — теперь upsert!
+# Memberships endpoints — теперь с обработкой IntegrityError
 @app.post("/memberships/", status_code=200)
 async def upsert_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
-    await crud.upsert_user_to_chat(session, user_id, chat_id)
+    try:
+        await crud.upsert_user_to_chat(session, user_id, chat_id)
+    except IntegrityError as exc:
+        logging.getLogger("db_service").warning(
+            f"IntegrityError при upsert_user_to_chat(user={user_id}, chat={chat_id}): {exc.orig}"
+        )
     return {"status": "ok"}
 
 @app.delete("/memberships/")
@@ -211,11 +222,9 @@ async def clear_progress(user_id: int, session: AsyncSession = Depends(get_sessi
     await crud.clear_user_data(session, user_id)
     return {"status": "cleared"}
 
-# Health check withoth database verification
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
 
 # Global exception handler
 @app.exception_handler(Exception)
