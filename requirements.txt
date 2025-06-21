@@ -11,3 +11,5 @@ alembic
 pymysql
 apscheduler
 pytz
+python-jose[cryptography]
+passlib[bcrypt]

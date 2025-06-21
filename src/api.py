@@ -18,6 +18,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 
+# === ДОБАВЛЕНО: импорт защиты API-ключа ===
+from .security import get_api_key
+
 # ---- Middleware для отключения access log на "/" ----
 class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -100,7 +103,8 @@ async def on_startup():
     scheduler.start()
     logging.info(f"[CLEANUP] Orphan cleanup scheduled: {cron_str} (Europe/Moscow)")
 
-@app.get("/")
+# === ЗАЩИЩЁННЫЙ endpoint (требует API-ключ) ===
+@app.get("/", dependencies=[Depends(get_api_key)])
 async def root():
     return {"status": "ok"}
 
@@ -108,47 +112,47 @@ async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
 
-# Chats endpoints
-@app.post("/chats/", response_model=ChatModel)
+# Chats endpoints (требуют API-ключ)
+@app.post("/chats/", response_model=ChatModel, dependencies=[Depends(get_api_key)])
 async def upsert_chat(chat: ChatModel, session: AsyncSession = Depends(get_session)):
     res = await crud.upsert_chat(session, chat.id, chat.title, chat.type)
     return ChatModel(id=res.id, title=res.title, type=res.type)
 
-@app.get("/chats/", response_model=List[int])
+@app.get("/chats/", response_model=List[int], dependencies=[Depends(get_api_key)])
 async def get_chats(session: AsyncSession = Depends(get_session)):
     return await crud.get_all_chats(session)
 
-@app.delete("/chats/{chat_id}")
+@app.delete("/chats/{chat_id}", dependencies=[Depends(get_api_key)])
 async def delete_chat(chat_id: int, session: AsyncSession = Depends(get_session)):
     await crud.delete_chat(session, chat_id)
     return {"status": "deleted"}
 
-# Users endpoints
-@app.put("/users/{user_id}/upsert", response_model=UserModel)
+# Users endpoints (требуют API-ключ)
+@app.put("/users/{user_id}/upsert", response_model=UserModel, dependencies=[Depends(get_api_key)])
 async def upsert_user(user_id: int, user: UserModel, session: AsyncSession = Depends(get_session)):
     res = await crud.upsert_user(session, user_id, user.username, user.full_name)
     return UserModel(id=res.id, username=res.username, full_name=res.full_name)
 
-@app.get("/users/{user_id}", response_model=UserModel)
+@app.get("/users/{user_id}", response_model=UserModel, dependencies=[Depends(get_api_key)])
 async def get_user(user_id: int, session: AsyncSession = Depends(get_session)):
     res = await crud.get_user(session, user_id)
     if not res:
         raise HTTPException(status_code=404, detail="User not found")
     return UserModel(id=res.id, username=res.username, full_name=res.full_name)
 
-@app.put("/users/{user_id}", response_model=UserModel)
+@app.put("/users/{user_id}", response_model=UserModel, dependencies=[Depends(get_api_key)])
 async def update_user(user_id: int, user: UserModel, session: AsyncSession = Depends(get_session)):
     await crud.update_user(session, user_id, username=user.username, full_name=user.full_name)
     res = await crud.get_user(session, user_id)
     return UserModel(id=res.id, username=res.username, full_name=res.full_name)
 
-@app.delete("/users/{user_id}")
+@app.delete("/users/{user_id}", dependencies=[Depends(get_api_key)])
 async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)):
     await crud.delete_user(session, user_id)
     return {"status": "deleted"}
 
-# Memberships endpoints — теперь с обработкой IntegrityError
-@app.post("/memberships/", status_code=200)
+# Memberships endpoints (требуют API-ключ)
+@app.post("/memberships/", status_code=200, dependencies=[Depends(get_api_key)])
 async def upsert_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
     try:
         await crud.upsert_user_to_chat(session, user_id, chat_id)
@@ -158,13 +162,13 @@ async def upsert_membership(user_id: int, chat_id: int, session: AsyncSession = 
         )
     return {"status": "ok"}
 
-@app.delete("/memberships/")
+@app.delete("/memberships/", dependencies=[Depends(get_api_key)])
 async def remove_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
     await crud.remove_user_from_chat(session, user_id, chat_id)
     return {"status": "removed"}
 
-# Invite links endpoints
-@app.post("/invite_links/", response_model=InviteLinkModel)
+# Invite links endpoints (требуют API-ключ)
+@app.post("/invite_links/", response_model=InviteLinkModel, dependencies=[Depends(get_api_key)])
 async def save_invite_link(invite_link: InviteLinkIn, session: AsyncSession = Depends(get_session)):
     res = await crud.save_invite_link(
         session,
@@ -179,7 +183,7 @@ async def save_invite_link(invite_link: InviteLinkIn, session: AsyncSession = De
         invite_link=res.invite_link, created_at=str(res.created_at), expires_at=str(res.expires_at)
     )
 
-@app.get("/invite_links/{user_id}", response_model=List[InviteLinkModel])
+@app.get("/invite_links/{user_id}", response_model=List[InviteLinkModel], dependencies=[Depends(get_api_key)])
 async def get_invite_links(user_id: int, session: AsyncSession = Depends(get_session)):
     res = await crud.get_valid_invite_links(session, user_id)
     return [
@@ -189,39 +193,40 @@ async def get_invite_links(user_id: int, session: AsyncSession = Depends(get_ses
         ) for item in res
     ]
 
-@app.delete("/invite_links/{user_id}")
+@app.delete("/invite_links/{user_id}", dependencies=[Depends(get_api_key)])
 async def delete_invite_links(user_id: int, session: AsyncSession = Depends(get_session)):
     await crud.delete_invite_links(session, user_id)
     return {"status": "deleted"}
 
-# Algorithm progress endpoints
-@app.get("/algo/{user_id}", response_model=AlgorithmProgressModel)
+# Algorithm progress endpoints (требуют API-ключ)
+@app.get("/algo/{user_id}", response_model=AlgorithmProgressModel, dependencies=[Depends(get_api_key)])
 async def get_progress(user_id: int, session: AsyncSession = Depends(get_session)):
     step = await crud.get_user_step(session, user_id)
     basic = await crud.get_basic_completed(session, user_id)
     adv = await crud.get_advanced_completed(session, user_id)
     return AlgorithmProgressModel(user_id=user_id, current_step=step or 0, basic_completed=basic or False, advanced_completed=adv or False)
 
-@app.put("/algo/{user_id}/step")
+@app.put("/algo/{user_id}/step", dependencies=[Depends(get_api_key)])
 async def set_progress(user_id: int, step: int, session: AsyncSession = Depends(get_session)):
     res = await crud.set_user_step(session, user_id, step)
     return {"status": "set", "current_step": res.current_step}
 
-@app.put("/algo/{user_id}/basic")
+@app.put("/algo/{user_id}/basic", dependencies=[Depends(get_api_key)])
 async def set_basic(user_id: int, completed: bool, session: AsyncSession = Depends(get_session)):
     res = await crud.set_basic_completed(session, user_id, completed)
     return {"status": "set", "basic_completed": res.basic_completed}
 
-@app.put("/algo/{user_id}/advanced")
+@app.put("/algo/{user_id}/advanced", dependencies=[Depends(get_api_key)])
 async def set_advanced(user_id: int, completed: bool, session: AsyncSession = Depends(get_session)):
     res = await crud.set_advanced_completed(session, user_id, completed)
     return {"status": "set", "advanced_completed": res.advanced_completed}
 
-@app.delete("/algo/{user_id}")
+@app.delete("/algo/{user_id}", dependencies=[Depends(get_api_key)])
 async def clear_progress(user_id: int, session: AsyncSession = Depends(get_session)):
     await crud.clear_user_data(session, user_id)
     return {"status": "cleared"}
 
+# Endpoint здоровья (healthcheck) — можно оставить открытым
 @app.get("/health")
 async def health():
     return {"status": "ok"}
