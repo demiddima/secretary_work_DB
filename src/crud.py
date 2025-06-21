@@ -2,8 +2,10 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from sqlalchemy.exc import OperationalError
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+
 from .models import (
-    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting
+    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link
 )
 
 # Retry configuration: up to 5 attempts, exponential backoff
@@ -212,3 +214,16 @@ async def cleanup_orphan_users(session: AsyncSession):
         async with session.begin():
             await session.execute(delete(User).where(User.id.in_(user_ids)))
     return user_ids
+
+@retry_db
+async def increment_link_visit(session: AsyncSession, link_key: str) -> Link:
+    stmt = select(Link).where(Link.link_key == link_key)
+    result = await session.execute(stmt)
+    link = result.scalars().first()
+
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    link.visits += 1
+    await session.commit()
+    return link

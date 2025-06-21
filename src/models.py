@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, BigInteger, String, DateTime, Boolean,
-    SmallInteger, ForeignKey, UniqueConstraint, func
+    SmallInteger, ForeignKey, UniqueConstraint, func, Integer
 )
 from .database import Base
 
@@ -27,7 +27,7 @@ class UserMembership(Base):
     joined_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 class InviteLink(Base):
-    __tablename__ = 'invite_links'
+    __tablename__ = 'invite_links_chats'
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger)
@@ -38,6 +38,16 @@ class InviteLink(Base):
     __table_args__ = (
         UniqueConstraint('user_id', 'chat_id', name='uq_invite_user_chat'),
     )
+    
+class Link(Base):
+    __tablename__ = 'links'
+
+    id         = Column(BigInteger, primary_key=True, autoincrement=True)
+    link_key   = Column(String(512), nullable=False, unique=True)
+    resource = Column(String(255), nullable=True)
+    visits     = Column(Integer, nullable=False, server_default='0')
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
 
 class UserAlgorithmProgress(Base):
     __tablename__ = 'user_algorithm_progress'

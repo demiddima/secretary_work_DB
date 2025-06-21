@@ -1,4 +1,3 @@
-# src/config.py
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -15,9 +14,11 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = Field(..., env='TELEGRAM_BOT_TOKEN')
     LOG_CHANNEL_ID: int = Field(..., env='LOG_CHANNEL_ID')
 
+    JWT_SECRET_KEY: str = Field(..., env='jwt_secret_key')
+    API_KEY_VALUE: str = Field(..., env='api_key_value')
+
     class Config:
         env_file = '.env'
         env_file_encoding = 'utf-8'
 
-# тут создаётся единственный объект настроек
 settings = Settings()

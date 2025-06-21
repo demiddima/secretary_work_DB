@@ -18,30 +18,29 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import pytz
 
-# === ДОБАВЛЕНО: импорт защиты API-ключа ===
+# NEW: импорт защиты API-ключа
 from .security import get_api_key
 
 # ---- Middleware для отключения access log на "/" ----
 class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if request.url.path == "/":
-            # Заглушка для "/" — без логов, но с ответом
             return PlainTextResponse("OK", status_code=200)
         return await call_next(request)
 
 app = FastAPI(title="DB Service API")
 app.add_middleware(SuppressRootAccessLogMiddleware)
 
-# Configure logging
+# Настройка логирования
 logging.basicConfig(
     level=settings.LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# APScheduler (глобальный объект)
+# APScheduler
 scheduler = AsyncIOScheduler()
 
-# Перехват IntegrityError для централизованной обработки
+# Перехват IntegrityError
 @app.exception_handler(IntegrityError)
 async def handle_integrity_error(request: Request, exc: IntegrityError):
     logging.getLogger("db_service").warning(f"IntegrityError: {exc.orig}")
@@ -50,7 +49,7 @@ async def handle_integrity_error(request: Request, exc: IntegrityError):
         content={"detail": "Ошибка целостности данных: проверьте параметры"}
     )
 
-# Pydantic schemas
+# Pydantic-схемы
 class ChatModel(BaseModel):
     id: int
     title: str
@@ -82,11 +81,14 @@ class InviteLinkIn(BaseModel):
     created_at: str
     expires_at: str
 
+class LinkVisitIn(BaseModel):
+    link_key: str
+
+# Инициализация БД и расписание
 @app.on_event("startup")
 async def on_startup():
     await init_db()
 
-    # ------ APScheduler: запуск очистки по расписанию ------
     async with AsyncSessionLocal() as session:
         cron_str = await crud.get_cleanup_cron(session)
     trigger = CronTrigger.from_crontab(cron_str, timezone=pytz.timezone('Europe/Moscow'))
@@ -103,16 +105,17 @@ async def on_startup():
     scheduler.start()
     logging.info(f"[CLEANUP] Orphan cleanup scheduled: {cron_str} (Europe/Moscow)")
 
-# === ЗАЩИЩЁННЫЙ endpoint (требует API-ключ) ===
+# Защищённый root
 @app.get("/", dependencies=[Depends(get_api_key)])
 async def root():
     return {"status": "ok"}
 
+# Dependency для сессии
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
 
-# Chats endpoints (требуют API-ключ)
+# --- Chats ---
 @app.post("/chats/", response_model=ChatModel, dependencies=[Depends(get_api_key)])
 async def upsert_chat(chat: ChatModel, session: AsyncSession = Depends(get_session)):
     res = await crud.upsert_chat(session, chat.id, chat.title, chat.type)
@@ -127,7 +130,7 @@ async def delete_chat(chat_id: int, session: AsyncSession = Depends(get_session)
     await crud.delete_chat(session, chat_id)
     return {"status": "deleted"}
 
-# Users endpoints (требуют API-ключ)
+# --- Users ---
 @app.put("/users/{user_id}/upsert", response_model=UserModel, dependencies=[Depends(get_api_key)])
 async def upsert_user(user_id: int, user: UserModel, session: AsyncSession = Depends(get_session)):
     res = await crud.upsert_user(session, user_id, user.username, user.full_name)
@@ -151,7 +154,7 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
     await crud.delete_user(session, user_id)
     return {"status": "deleted"}
 
-# Memberships endpoints (требуют API-ключ)
+# --- Memberships ---
 @app.post("/memberships/", status_code=200, dependencies=[Depends(get_api_key)])
 async def upsert_membership(user_id: int, chat_id: int, session: AsyncSession = Depends(get_session)):
     try:
@@ -167,7 +170,7 @@ async def remove_membership(user_id: int, chat_id: int, session: AsyncSession = 
     await crud.remove_user_from_chat(session, user_id, chat_id)
     return {"status": "removed"}
 
-# Invite links endpoints (требуют API-ключ)
+# --- Invite links ---
 @app.post("/invite_links/", response_model=InviteLinkModel, dependencies=[Depends(get_api_key)])
 async def save_invite_link(invite_link: InviteLinkIn, session: AsyncSession = Depends(get_session)):
     res = await crud.save_invite_link(
@@ -198,7 +201,7 @@ async def delete_invite_links(user_id: int, session: AsyncSession = Depends(get_
     await crud.delete_invite_links(session, user_id)
     return {"status": "deleted"}
 
-# Algorithm progress endpoints (требуют API-ключ)
+# --- Algorithm progress ---
 @app.get("/algo/{user_id}", response_model=AlgorithmProgressModel, dependencies=[Depends(get_api_key)])
 async def get_progress(user_id: int, session: AsyncSession = Depends(get_session)):
     step = await crud.get_user_step(session, user_id)
@@ -226,23 +229,24 @@ async def clear_progress(user_id: int, session: AsyncSession = Depends(get_sessi
     await crud.clear_user_data(session, user_id)
     return {"status": "cleared"}
 
-# Endpoint здоровья (healthcheck) — можно оставить открытым
+# --- Links visits endpoint ---
+@app.post("/links/visit", dependencies=[Depends(get_api_key)])
+async def track_link_visit(payload: LinkVisitIn, session: AsyncSession = Depends(get_session)):
+    link = await crud.increment_link_visit(session, payload.link_key)
+    return {"status": "ok", "link_key": link.link_key, "visits": link.visits}
+
+# --- Healthcheck ---
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
-# Global exception handler
+# --- Глобальный обработчик ошибок ---
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc):
-    """
-    Handle uncaught exceptions, log and notify via Telegram
-    """
     logger = logging.getLogger('db_service')
     tb = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     msg = f"Exception in request {request.method} {request.url}\n\n{tb}"
-    # Log the error
     logger.error(msg)
-    # Send to Telegram channel
     token = settings.TELEGRAM_BOT_TOKEN
     chat_id = settings.LOG_CHANNEL_ID
     async with httpx.AsyncClient() as client:
