@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = Field(..., env='TELEGRAM_BOT_TOKEN')
     LOG_CHANNEL_ID: int = Field(..., env='LOG_CHANNEL_ID')
 
-    JWT_SECRET_KEY: str = Field(..., env='jwt_secret_key')
-    API_KEY_VALUE: str = Field(..., env='api_key_value')
+    JWT_SECRET_KEY: str = Field(..., env='JWT_SECRET_KEY')
+    API_KEY_VALUE: str = Field(..., env='API_KEY_VALUE')
 
     class Config:
         env_file = '.env'

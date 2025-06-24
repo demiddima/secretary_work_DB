@@ -1,0 +1,59 @@
+import src.logger  # настраивает консольный лог и TelegramHandler
+from fastapi import FastAPI, Request
+from contextlib import asynccontextmanager
+from builtins import BaseExceptionGroup
+from sqlalchemy.exc import IntegrityError
+
+from src.exceptions import handle_integrity_error, handle_global_exception
+from src.database import init_db
+from src.scheduler import setup_scheduler
+from src.routers import (
+    chats, users, memberships,
+    invite_links, algorithm, links, health
+)
+from src.middleware import SuppressRootAccessLogMiddleware
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # при старте приложения
+    await init_db()
+    await setup_scheduler()
+    yield
+    # при остановке можно добавить cleanup, если потребуется
+
+app = FastAPI(title="DB Service API", lifespan=lifespan)
+
+@app.middleware("http")
+async def catch_all_exceptions(request: Request, call_next):
+    """
+    Универсальный middleware: ловит любые исключения,
+    разворачивает BaseExceptionGroup (Python 3.11+),
+    отделяет IntegrityError и прокидывает в ваши хендлеры.
+    """
+    try:
+        return await call_next(request)
+    except BaseExceptionGroup as eg:
+        sub = eg.exceptions[0]
+        if isinstance(sub, IntegrityError):
+            return await handle_integrity_error(request, sub)
+        return await handle_global_exception(request, sub)
+    except IntegrityError as exc:
+        return await handle_integrity_error(request, exc)
+    except Exception as exc:
+        return await handle_global_exception(request, exc)
+
+# Зарегистрируем хендлеры (хотя основное — через middleware выше)
+from src.exceptions import register_exception_handlers
+register_exception_handlers(app)
+
+# Подключаем «заглушку» для / без лишних логов
+app.add_middleware(SuppressRootAccessLogMiddleware)
+
+# И наконец — все роутеры
+app.include_router(chats.router)
+app.include_router(users.router)
+app.include_router(memberships.router)
+app.include_router(invite_links.router)
+app.include_router(algorithm.router)
+app.include_router(links.router)
+app.include_router(health.router)

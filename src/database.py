@@ -8,7 +8,7 @@ DATABASE_URL = (
     f"@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
 )
 
-# Создаём асинхронный движок с проверкой живости соединений и отладочным выводом в DEBUG
+# Создаём асинхронный движок
 engine = create_async_engine(
     DATABASE_URL,
     pool_size=settings.POOL_MIN_SIZE,
@@ -33,3 +33,14 @@ async def init_db():
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+# ────────── НОВЫЙ КОД ──────────
+
+async def get_session() -> AsyncSession:
+    """
+    FastAPI dependency: выдаёт сессию и сам её закрывает.
+    Использовать в роутерах:
+        async def endpoint(..., session: AsyncSession = Depends(get_session))
+    """
+    async with AsyncSessionLocal() as session:
+        yield session
