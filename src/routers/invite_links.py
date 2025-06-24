@@ -26,19 +26,19 @@ async def save_invite_link(
     )
     return db_link
 
+@router.get("/all/{user_id}", response_model=List[InviteLinkModel])
+async def get_all_invite_links(
+    user_id: int,
+    session: AsyncSession = Depends(get_session)
+):
+    return await crud.get_invite_links(session, user_id=user_id)
+
 @router.get("/{user_id}", response_model=List[InviteLinkModel])
 async def get_valid_invite_links(
     user_id: int,
     session: AsyncSession = Depends(get_session)
 ):
     return await crud.get_valid_invite_links(session, user_id=user_id)
-
-@router.get("/{user_id}", response_model=List[InviteLinkModel])
-async def get_all_invite_links(
-    user_id: int,
-    session: AsyncSession = Depends(get_session)
-):
-    return await crud.get_invite_links(session, user_id=user_id)
 
 @router.delete("/{user_id}", response_model=None)
 async def delete_invite_links(
