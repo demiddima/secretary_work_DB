@@ -125,6 +125,14 @@ async def get_valid_invite_links(session: AsyncSession, user_id: int):
     return res.scalars().all()
 
 @retry_db
+async def get_invite_links(session: AsyncSession, user_id: int):
+    stmt = select(InviteLink).where(
+        InviteLink.user_id == user_id
+    )
+    res = await session.execute(stmt)
+    return res.scalars().all()
+
+@retry_db
 async def delete_invite_links(session: AsyncSession, user_id: int):
     async with session.begin():
         await session.execute(delete(InviteLink).where(InviteLink.user_id == user_id))
