@@ -1,10 +1,14 @@
+# commit: добавлен handler для RequestValidationError с логированием тела и ошибок валидации
+import logging
 import src.logger  # настраивает консольный лог и TelegramHandler
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from contextlib import asynccontextmanager
 from builtins import BaseExceptionGroup
 from sqlalchemy.exc import IntegrityError
 
-from src.exceptions import handle_integrity_error, handle_global_exception
+from src.exceptions import handle_integrity_error, handle_global_exception, register_exception_handlers
 from src.database import init_db
 from src.scheduler import setup_scheduler
 from src.routers import (
@@ -22,6 +26,15 @@ async def lifespan(app: FastAPI):
     # при остановке можно добавить cleanup, если потребуется
 
 app = FastAPI(title="DB Service API", lifespan=lifespan)
+
+# Регистрация обработчика валидационных ошибок RequestValidationError
+logger = logging.getLogger("uvicorn.error")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.error(f"[ValidationError] body={body!r} errors={exc.errors()}")
+    return await request_validation_exception_handler(request, exc)
 
 @app.middleware("http")
 async def catch_all_exceptions(request: Request, call_next):
@@ -42,8 +55,7 @@ async def catch_all_exceptions(request: Request, call_next):
     except Exception as exc:
         return await handle_global_exception(request, exc)
 
-# Зарегистрируем хендлеры (хотя основное — через middleware выше)
-from src.exceptions import register_exception_handlers
+# Зарегистрируем хендлеры глобальных исключений
 register_exception_handlers(app)
 
 # Подключаем «заглушку» для / без лишних логов
