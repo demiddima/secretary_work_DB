@@ -1,18 +1,17 @@
-# commit: добавлен фильтр для игнорирования ошибок BadStatusLine в TelegramHandler
+# commit: заменена проверка BadStatusLine без зависимости от aiohttp
 from .config import settings
 import logging
 import httpx
-from aiohttp.http_exceptions import BadStatusLine
 
 class IgnoreBadStatusLineFilter(logging.Filter):
     """
     Logging filter to ignore aiohttp BadStatusLine errors (TLS handshake on HTTP port)
-    and messages containing 'Invalid method encountered'.
+    and messages containing 'Invalid method encountered', without requiring aiohttp.
     """
     def filter(self, record: logging.LogRecord) -> bool:
-        # If exception is BadStatusLine, ignore
+        # If exception is named BadStatusLine, ignore
         exc = record.exc_info[1] if record.exc_info else None
-        if isinstance(exc, BadStatusLine):
+        if exc and exc.__class__.__name__ == "BadStatusLine":
             return False
         # If message text indicates invalid method, ignore
         msg = record.getMessage()
