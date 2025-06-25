@@ -1,6 +1,24 @@
+# commit: добавлен фильтр для игнорирования ошибок BadStatusLine в TelegramHandler
 from .config import settings
 import logging
 import httpx
+from aiohttp.http_exceptions import BadStatusLine
+
+class IgnoreBadStatusLineFilter(logging.Filter):
+    """
+    Logging filter to ignore aiohttp BadStatusLine errors (TLS handshake on HTTP port)
+    and messages containing 'Invalid method encountered'.
+    """
+    def filter(self, record: logging.LogRecord) -> bool:
+        # If exception is BadStatusLine, ignore
+        exc = record.exc_info[1] if record.exc_info else None
+        if isinstance(exc, BadStatusLine):
+            return False
+        # If message text indicates invalid method, ignore
+        msg = record.getMessage()
+        if "Invalid method encountered" in msg:
+            return False
+        return True
 
 class TelegramHandler(logging.Handler):
     """
@@ -33,7 +51,7 @@ def configure_logging() -> None:
     Configures root logger:
       - Reads LOG_LEVEL from settings
       - Adds StreamHandler for console output
-      - Adds TelegramHandler for ERROR+ logs
+      - Adds TelegramHandler for ERROR+ logs, excluding BadStatusLine noise
     """
     log_level = settings.LOG_LEVEL.upper()
     root = logging.getLogger()
@@ -53,6 +71,8 @@ def configure_logging() -> None:
     th = TelegramHandler()
     th.setLevel(logging.ERROR)
     th.setFormatter(formatter)
+    # Добавляем фильтр, чтобы BadStatusLine не шёл в Telegram
+    th.addFilter(IgnoreBadStatusLineFilter())
     root.addHandler(th)
 
 # Initialize on import
