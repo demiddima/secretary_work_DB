@@ -4,6 +4,7 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from sqlalchemy.dialects.mysql import insert
+from datetime import datetime
 
 from .models import (
     Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link
