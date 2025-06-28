@@ -18,18 +18,35 @@ retry_db = retry(
 )
 
 # ---- Chats ----
+# ---- Chats ----
 @retry_db
-async def upsert_chat(session: AsyncSession, chat_id: int, title: str, type_: str):
+async def upsert_chat(
+    session: AsyncSession,
+    chat_id: int,
+    title: str,
+    type_: str,
+    added_at: datetime,               # ← принимаем added_at из запроса
+):
     async with session.begin():
         stmt = select(Chat).where(Chat.id == chat_id)
         res = await session.execute(stmt)
         chat = res.scalar_one_or_none()
+
         if chat:
+            # при апдейте тоже обновляем added_at
             chat.title = title
             chat.type = type_
+            chat.added_at = added_at
         else:
-            chat = Chat(id=chat_id, title=title, type=type_)
+            # при создании сохраняем добавленное время
+            chat = Chat(
+                id=chat_id,
+                title=title,
+                type=type_,
+                added_at=added_at
+            )
             session.add(chat)
+
     return chat
 
 @retry_db

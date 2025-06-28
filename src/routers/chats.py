@@ -17,8 +17,13 @@ async def upsert_chat(
     chat: ChatModel,
     session: AsyncSession = Depends(get_session)
 ):
-    """Создать или обновить чат."""
-    db_chat = await crud.upsert_chat(session, chat_id=chat.id, title=chat.title, type_=chat.type)
+    db_chat = await crud.upsert_chat(
+        session,
+        chat_id=chat.id,
+        title=chat.title,
+        type_=chat.type,
+        added_at=chat.added_at or datetime.utcnow()
+    )
     return db_chat
 
 @router.get("/", response_model=List[int])
