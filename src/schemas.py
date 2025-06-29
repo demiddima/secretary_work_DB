@@ -13,7 +13,7 @@ class ChatModel(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class UserUpdate(BaseModel):
+class UserModel(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
     terms_accepted: Optional[bool] = None  # теперь тоже опционально

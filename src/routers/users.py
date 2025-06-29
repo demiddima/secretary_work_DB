@@ -32,7 +32,7 @@ async def get_user(
 @router.put("/{user_id}", response_model=None)
 async def update_user(
     user_id: int,
-    user: UserUpdate,                            # <-- теперь принимаем UserUpdate
+    user: UserModel,                            # <-- теперь принимаем UserUpdate
     session: AsyncSession = Depends(get_session)
 ):
     # dict только с теми полями, которые реально пришли в запросе
