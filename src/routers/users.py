@@ -32,21 +32,41 @@ async def get_user(
 @router.put("/{user_id}", response_model=None)
 async def update_user(
     user_id: int,
-    user: UserUpdate,                     # <-- здесь UserUpdate
+    user: UserUpdate,
     session: AsyncSession = Depends(get_session)
 ):
-    # собираем только те пары (ключ:значение), что не None
+    """
+    Полное обновление пользователя (PUT): перезаписывает только непустые поля.
+    Все поля в теле должны быть прописаны, но None-пропуски игнорируются.
+    """
+    # Собираем только те пары (ключ:значение), где значение не None
     data = {
-        k: v
-        for k, v in {
+        key: value
+        for key, value in {
             "username":        user.username,
             "full_name":       user.full_name,
             "terms_accepted":  user.terms_accepted,
         }.items()
-        if v is not None
+        if value is not None
     }
     await crud.update_user(session, id=user_id, **data)
     return {"ok": True}
+
+@router.patch("/{user_id}", status_code=204)
+async def patch_user(
+    user_id: int,
+    user: UserUpdate = Body(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Частичное обновление пользователя (PATCH): в запросе передаются любые поля.
+    """
+    # Берём только переданные поля
+    data = user.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="Нет полей для обновления")
+    await crud.update_user(session, id=user_id, **data)
+    # 204 No Content отсутствует тело
 
 @router.delete("/{user_id}", response_model=None)
 async def delete_user(
