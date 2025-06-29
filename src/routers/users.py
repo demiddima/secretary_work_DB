@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.schemas import UserModel
+from src.schemas import UserModel, UserUpdate
 from src.database import get_session
 from src import crud
 
@@ -32,14 +32,20 @@ async def get_user(
 @router.put("/{user_id}", response_model=None)
 async def update_user(
     user_id: int,
-    user: UserModel,                            # <-- теперь принимаем UserUpdate
+    user: UserUpdate,                     # <-- здесь UserUpdate
     session: AsyncSession = Depends(get_session)
 ):
-    # dict только с теми полями, которые реально пришли в запросе
-    update_data = user.dict(exclude_unset=True)
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields provided for update")
-    await crud.update_user(session, id=user_id, **update_data)
+    # собираем только те пары (ключ:значение), что не None
+    data = {
+        k: v
+        for k, v in {
+            "username":        user.username,
+            "full_name":       user.full_name,
+            "terms_accepted":  user.terms_accepted,
+        }.items()
+        if v is not None
+    }
+    await crud.update_user(session, id=user_id, **data)
     return {"ok": True}
 
 @router.delete("/{user_id}", response_model=None)

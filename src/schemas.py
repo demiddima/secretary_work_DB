@@ -19,6 +19,16 @@ class UserModel(BaseModel):
     terms_accepted: Optional[bool] = None  # теперь тоже опционально
 
     model_config = ConfigDict(from_attributes=True)
+    
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    terms_accepted: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class InviteLinkIn(BaseModel):
     user_id: int
