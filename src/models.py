@@ -18,6 +18,7 @@ class User(Base):
     id = Column(BigInteger, primary_key=True)
     username = Column(String(255))
     full_name = Column(String(255))
+    terms_accepted = Column(Boolean, nullable=False, default=False)
 
 class UserMembership(Base):
     __tablename__ = 'user_memberships'

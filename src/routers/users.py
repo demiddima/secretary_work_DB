@@ -35,7 +35,17 @@ async def update_user(
     user: UserModel,
     session: AsyncSession = Depends(get_session)
 ):
-    await crud.update_user(session, id=user_id, username=user.username, full_name=user.full_name)
+    # собираем только непустые поля
+    data = {
+        k: v
+        for k, v in {
+            "username": user.username,
+            "full_name": user.full_name,
+            "terms_accepted": user.terms_accepted,
+        }.items()
+        if v is not None or k == "terms_accepted"
+    }
+    await crud.update_user(session, id=user_id, **data)
     return {"ok": True}
 
 @router.delete("/{user_id}", response_model=None)

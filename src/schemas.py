@@ -17,6 +17,7 @@ class UserModel(BaseModel):
     id: int
     username: Optional[str]
     full_name: Optional[str]
+    terms_accepted: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

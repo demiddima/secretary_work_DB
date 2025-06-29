@@ -62,8 +62,11 @@ async def get_all_chats(session: AsyncSession):
     return [row[0] for row in res.all()]
 
 # ---- Users ----
-@retry_db
-async def upsert_user(session: AsyncSession, id: int, username: str = None, full_name: str = None):
+async def upsert_user(session: AsyncSession,
+                      id: int,
+                      username: str | None,
+                      full_name: str | None,
+                      terms_accepted: bool = False):
     async with session.begin():
         stmt = select(User).where(User.id == id)
         res = await session.execute(stmt)
@@ -71,8 +74,14 @@ async def upsert_user(session: AsyncSession, id: int, username: str = None, full
         if user:
             user.username = username
             user.full_name = full_name
+            user.terms_accepted = terms_accepted
         else:
-            user = User(id=id, username=username, full_name=full_name)
+            user = User(
+                id=id,
+                username=username,
+                full_name=full_name,
+                terms_accepted=terms_accepted
+            )
             session.add(user)
     return user
 
