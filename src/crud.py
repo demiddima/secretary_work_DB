@@ -1,6 +1,6 @@
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from sqlalchemy.exc import OperationalError
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from sqlalchemy.dialects.mysql import insert
@@ -85,9 +85,8 @@ async def get_user(session: AsyncSession, id: int):
 @retry_db
 async def update_user(session: AsyncSession, id: int, **fields):
     async with session.begin():
-        await session.execute(
-            update(User).where(User.id == id).values(**fields)
-        )
+        stmt = update(User).where(User.id == id).values(**fields)
+        await session.execute(stmt)
 
 @retry_db
 async def delete_user(session: AsyncSession, id: int):
