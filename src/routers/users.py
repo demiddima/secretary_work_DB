@@ -32,20 +32,14 @@ async def get_user(
 @router.put("/{user_id}", response_model=None)
 async def update_user(
     user_id: int,
-    user: UserModel,
+    user: UserUpdate,                            # <-- теперь принимаем UserUpdate
     session: AsyncSession = Depends(get_session)
 ):
-    # собираем только непустые поля
-    data = {
-        k: v
-        for k, v in {
-            "username": user.username,
-            "full_name": user.full_name,
-            "terms_accepted": user.terms_accepted,
-        }.items()
-        if v is not None or k == "terms_accepted"
-    }
-    await crud.update_user(session, id=user_id, **data)
+    # dict только с теми полями, которые реально пришли в запросе
+    update_data = user.dict(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields provided for update")
+    await crud.update_user(session, id=user_id, **update_data)
     return {"ok": True}
 
 @router.delete("/{user_id}", response_model=None)

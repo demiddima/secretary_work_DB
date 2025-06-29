@@ -13,11 +13,10 @@ class ChatModel(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class UserModel(BaseModel):
-    id: int
-    username: Optional[str]
-    full_name: Optional[str]
-    terms_accepted: bool = False
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    terms_accepted: Optional[bool] = None  # теперь тоже опционально
 
     model_config = ConfigDict(from_attributes=True)
 
