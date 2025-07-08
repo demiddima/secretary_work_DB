@@ -1,6 +1,8 @@
+import sqlalchemy as sa
 from sqlalchemy import (
     Column, BigInteger, String, DateTime, Boolean,
-    SmallInteger, ForeignKey, UniqueConstraint, func, Integer
+    SmallInteger, ForeignKey, UniqueConstraint, func, Integer,
+    Text
 )
 from .database import Base
 
@@ -45,43 +47,48 @@ class Link(Base):
 
     id         = Column(BigInteger, primary_key=True, autoincrement=True)
     link_key   = Column(String(512), nullable=False, unique=True)
-    resource = Column(String(255), nullable=True)
+    resource   = Column(String(255), nullable=True)
     visits     = Column(Integer, nullable=False, server_default='0')
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
-
 
 class UserAlgorithmProgress(Base):
     __tablename__ = 'user_algorithm_progress'
 
-    user_id = Column(BigInteger, ForeignKey('users.id'), primary_key=True)
-    current_step = Column(SmallInteger, default=0, nullable=False)
-    basic_completed = Column(Boolean, default=False, nullable=False)
-    advanced_completed = Column(Boolean, default=False, nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    user_id           = Column(BigInteger, ForeignKey('users.id'), primary_key=True)
+    current_step      = Column(SmallInteger, default=0, nullable=False)
+    basic_completed   = Column(Boolean, default=False, nullable=False)
+    advanced_completed= Column(Boolean, default=False, nullable=False)
+    updated_at        = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     
 class Setting(Base):
     __tablename__ = 'settings'
-    id = Column(BigInteger, primary_key=True)
-    value = Column(String(100), nullable=False)  # ← раньше было cleanup_cron
+    id         = Column(BigInteger, primary_key=True)
+    value      = Column(String(100), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-class Reminder(Base):
-    __tablename__ = 'reminders'
+# Модели для Узнавайка
 
-    internal_request_id = Column(String(36), primary_key=True)  # UUID
-    telegram_user_id = Column(BigInteger, nullable=False)
-    first_notification_at = Column(DateTime, nullable=False)
-    frequency_hours = Column(Integer, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    offer_name = Column(String, nullable=False)
-    is_offer_completed = Column(Boolean, nullable=False, default=False)
-    offer_payout = Column(String(255), nullable=True)
 
+class Request(Base):
+    __tablename__ = 'requests'
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    user_id      = Column(BigInteger, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    offer_name   = Column(String(64), nullable=False)
+    is_completed = Column(Boolean, nullable=False, server_default=sa.text('0'))
+    created_at   = Column(DateTime, server_default=func.now(), nullable=False)
+
+class ReminderSetting(Base):
+    __tablename__ = 'reminder_settings'
+
+    request_id              = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), primary_key=True)
+    first_notification_at   = Column(DateTime, nullable=False)
+    frequency_hours         = Column(Integer, nullable=False)
+    created_at              = Column(DateTime, server_default=func.now(), nullable=False)
 
 class Notification(Base):
     __tablename__ = 'notifications'
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    internal_request_id = Column(String(36), ForeignKey('reminders.internal_request_id', ondelete='CASCADE'), nullable=False)
-    telegram_user_id = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    request_id       = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), primary_key=True)
+    notification_at  = Column(DateTime, nullable=False)
+    created_at       = Column(DateTime, server_default=func.now(), nullable=False)

@@ -13,7 +13,8 @@ from src.database import init_db
 from src.scheduler import setup_scheduler
 from src.routers import (
     chats, users, memberships,
-    invite_links, algorithm, links, health
+    invite_links, algorithm, links, health, 
+    requests, reminder_settings, notifications
 )
 from src.middleware import SuppressRootAccessLogMiddleware
 
@@ -69,3 +70,6 @@ app.include_router(invite_links.router)
 app.include_router(algorithm.router)
 app.include_router(links.router)
 app.include_router(health.router)
+app.include_router(requests.router)
+app.include_router(reminder_settings.router)
+app.include_router(notifications.router)

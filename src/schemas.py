@@ -1,10 +1,11 @@
 # src/schemas.py
-# commit: replaced string timestamps with datetime types for proper serialization
+# commit: обновлены схемы для Request, ReminderSetting, Notification; удалены старые Reminder и Notification
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
-from uuid import UUID
+from typing import Optional
+
+# Существующие модели (не изменялись)
 
 class ChatModel(BaseModel):
     id: int
@@ -17,7 +18,7 @@ class ChatModel(BaseModel):
 class UserModel(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
-    terms_accepted: Optional[bool] = None  # теперь тоже опционально
+    terms_accepted: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -60,7 +61,7 @@ class LinkVisitIn(BaseModel):
     link_key: str
 
     model_config = ConfigDict(from_attributes=True)
-    
+
 class SettingModel(BaseModel):
     id: int
     value: str
@@ -69,29 +70,49 @@ class SettingModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ReminderCreate(BaseModel):
-    internal_request_id: UUID
-    telegram_user_id: int
-    first_notification_at: datetime
-    frequency_hours: int
+# Новые схемы для узнaвайки
+
+class RequestCreate(BaseModel):
+    user_id: int
     offer_name: str
-    is_offer_completed: bool = False
-    offer_payout: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class RequestModel(RequestCreate):
+    id: int
+    is_completed: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class RequestStatusUpdate(BaseModel):
+    is_completed: bool
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class ReminderModel(ReminderCreate):
+class ReminderSettingsCreate(BaseModel):
+    request_id: int
+    first_notification_at: datetime
+    frequency_hours: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ReminderSettingsModel(ReminderSettingsCreate):
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationCreate(BaseModel):
-    internal_request_id: UUID
-    telegram_user_id: int
+    request_id: int
+    notification_at: Optional[datetime] = None  # если None — ставим текущую дату
 
     model_config = ConfigDict(from_attributes=True)
 
-
-class NotificationModel(NotificationCreate):
-    id: int
+class NotificationModel(BaseModel):
+    request_id: int
+    notification_at: datetime
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

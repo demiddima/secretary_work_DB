@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 from sqlalchemy.dialects.mysql import insert
 from datetime import datetime
+from . import models, schemas
 
 from .models import (
-    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link
+    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link, Request, ReminderSetting, Notification
 )
 
 # Retry configuration: up to 5 attempts, exponential backoff
@@ -281,3 +282,71 @@ async def increment_link_visit(session: AsyncSession, link_key: str) -> Link:
     link.visits += 1
     await session.commit()
     return link
+
+@retry_db
+async def create_request(
+    session: AsyncSession,
+    data: schemas.RequestCreate
+) -> models.Request:
+    obj = models.Request(
+        user_id=data.user_id,
+        offer_name=data.offer_name
+    )
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+    return obj
+
+
+@retry_db
+async def update_request_status(
+    session: AsyncSession,
+    request_id: int,
+    is_completed: bool
+) -> models.Request:
+    obj = await session.get(models.Request, request_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="Request not found")
+    obj.is_completed = is_completed
+    await session.commit()
+    await session.refresh(obj)
+    return obj
+
+@retry_db
+async def create_reminder_setting(
+    session: AsyncSession,
+    data: schemas.ReminderSettingsCreate
+) -> models.ReminderSetting:
+    # проверим, что заявка существует
+    req = await session.get(models.Request, data.request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    obj = models.ReminderSetting(
+        request_id=data.request_id,
+        first_notification_at=data.first_notification_at,
+        frequency_hours=data.frequency_hours
+    )
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+    return obj
+
+@retry_db
+async def create_notification(
+    session: AsyncSession,
+    data: schemas.NotificationCreate
+) -> models.Notification:
+    # если дата не указана — ставим сейчас
+    ts = data.notification_at or datetime.utcnow()
+    # проверим, что заявка существует
+    req = await session.get(models.Request, data.request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    obj = models.Notification(
+        request_id=data.request_id,
+        notification_at=ts
+    )
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+    return obj
