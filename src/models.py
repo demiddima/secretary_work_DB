@@ -62,5 +62,26 @@ class UserAlgorithmProgress(Base):
 class Setting(Base):
     __tablename__ = 'settings'
     id = Column(BigInteger, primary_key=True)
-    cleanup_cron = Column(String(100), nullable=False)
+    value = Column(String(100), nullable=False)  # ← раньше было cleanup_cron
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class Reminder(Base):
+    __tablename__ = 'reminders'
+
+    internal_request_id = Column(String(36), primary_key=True)  # UUID
+    telegram_user_id = Column(BigInteger, nullable=False)
+    first_notification_at = Column(DateTime, nullable=False)
+    frequency_hours = Column(Integer, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    offer_name = Column(String, nullable=False)
+    is_offer_completed = Column(Boolean, nullable=False, default=False)
+    offer_payout = Column(String(255), nullable=True)
+
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    internal_request_id = Column(String(36), ForeignKey('reminders.internal_request_id', ondelete='CASCADE'), nullable=False)
+    telegram_user_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

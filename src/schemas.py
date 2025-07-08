@@ -4,6 +4,7 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
+from uuid import UUID
 
 class ChatModel(BaseModel):
     id: int
@@ -59,3 +60,38 @@ class LinkVisitIn(BaseModel):
     link_key: str
 
     model_config = ConfigDict(from_attributes=True)
+    
+class SettingModel(BaseModel):
+    id: int
+    value: str
+    updated_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReminderCreate(BaseModel):
+    internal_request_id: UUID
+    telegram_user_id: int
+    first_notification_at: datetime
+    frequency_hours: int
+    offer_name: str
+    is_offer_completed: bool = False
+    offer_payout: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReminderModel(ReminderCreate):
+    created_at: datetime
+
+
+class NotificationCreate(BaseModel):
+    internal_request_id: UUID
+    telegram_user_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationModel(NotificationCreate):
+    id: int
+    created_at: datetime

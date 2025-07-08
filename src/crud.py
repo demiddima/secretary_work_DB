@@ -19,7 +19,6 @@ retry_db = retry(
 )
 
 # ---- Chats ----
-# ---- Chats ----
 @retry_db
 async def upsert_chat(
     session: AsyncSession,
