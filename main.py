@@ -20,7 +20,7 @@ from src.scheduler import setup_scheduler
 from src.routers import (
     chats, users, memberships,
     invite_links, algorithm, links, health, 
-    requests, reminder_settings, notifications
+    requests, reminder_settings, notifications, offers
 )
 from src.middleware import SuppressRootAccessLogMiddleware
 
@@ -80,3 +80,4 @@ app.include_router(health.router)
 app.include_router(requests.router)
 app.include_router(reminder_settings.router)
 app.include_router(notifications.router)
+app.include_router(offers)
