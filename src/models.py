@@ -2,8 +2,9 @@ import sqlalchemy as sa
 from sqlalchemy import (
     Column, BigInteger, String, DateTime, Boolean,
     SmallInteger, ForeignKey, UniqueConstraint, func, Integer,
-    Text
+    Text, Float  
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from .database import Base
 
 class Chat(Base):
@@ -74,7 +75,7 @@ class Request(Base):
 
     id           = Column(Integer, primary_key=True, autoincrement=True)
     user_id      = Column(BigInteger, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    offer_name   = Column(String(64), nullable=False)
+    offer_id     = Column(Integer, ForeignKey('offers.id', ondelete='CASCADE'), nullable=False)
     is_completed = Column(Boolean, nullable=False, server_default=sa.text('0'))
     created_at   = Column(DateTime, server_default=func.now(), nullable=False)
 
@@ -92,3 +93,19 @@ class Notification(Base):
     request_id       = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), primary_key=True)
     notification_at  = Column(DateTime, nullable=False)
     created_at       = Column(DateTime, server_default=func.now(), nullable=False)
+
+class Offer(Base):
+    __tablename__ = 'offers'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(128), nullable=False)
+    income = Column(Float, nullable=False)   # Оборот
+    expense = Column(Float, nullable=False)  # Расход
+
+    payout = Column(Float, nullable=False)        # Выплата
+    to_you = Column(Float, nullable=False)        # Вам
+    to_ludochat = Column(Float, nullable=False)   # Лудочат
+    to_manager = Column(Float, nullable=False)    # Менеджер
+    tax = Column(Float, nullable=False)           # Налог
+
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)

@@ -13,7 +13,7 @@ router = APIRouter(prefix="/reminder_settings", tags=["reminder_settings"])
 @router.post("/", response_model=schemas.ReminderSettingsModel, summary="Создать настройку напоминания")
 async def create_setting(
     data: schemas.ReminderSettingsCreate,
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_session)
 ):
     try:
         return await crud.create_reminder_setting(session, data)

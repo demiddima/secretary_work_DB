@@ -13,7 +13,7 @@ router = APIRouter(prefix="/requests", tags=["requests"])
 @router.post("/", response_model=schemas.RequestModel, summary="Создать заявку")
 async def create_request(
     data: schemas.RequestCreate,
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_session)
 ):
     try:
         return await crud.create_request(session, data)
@@ -31,7 +31,7 @@ async def create_request(
 async def set_status(
     request_id: int,
     status: schemas.RequestStatusUpdate,
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_session)
 ):
     try:
         return await crud.update_request_status(session, request_id, status.is_completed)

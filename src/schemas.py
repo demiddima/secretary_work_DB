@@ -70,13 +70,48 @@ class SettingModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# Новые схемы для узнaвайки
+# -------------------- OFFER --------------------
+
+class OfferCreate(BaseModel):
+    name: str
+    income: float
+    expense: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OfferModel(BaseModel):
+    id: int
+    name: str
+    income: float       # Оборот
+    expense: float      # Расход
+    payout: float       # Выплата
+    to_you: float       # Вам
+    to_ludochat: float  # Лудочат
+    to_manager: float   # Менеджер
+    tax: float          # Налог
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Модель для вывода — с расчётами
+class OfferModelOut(OfferModel):
+    payout: float
+    to_you: float
+    to_ludochat: float
+    to_manager: float
+    tax: float
+
+
+# -------------------- REQUEST --------------------
 
 class RequestCreate(BaseModel):
     user_id: int
-    offer_name: str
+    offer_id: int
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class RequestModel(RequestCreate):
     id: int
@@ -85,11 +120,14 @@ class RequestModel(RequestCreate):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class RequestStatusUpdate(BaseModel):
     is_completed: bool
 
     model_config = ConfigDict(from_attributes=True)
 
+
+# -------------------- REMINDER --------------------
 
 class ReminderSettingsCreate(BaseModel):
     request_id: int
@@ -98,17 +136,21 @@ class ReminderSettingsCreate(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class ReminderSettingsModel(ReminderSettingsCreate):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
+# -------------------- NOTIFICATION --------------------
+
 class NotificationCreate(BaseModel):
     request_id: int
     notification_at: Optional[datetime] = None  # если None — ставим текущую дату
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class NotificationModel(BaseModel):
     request_id: int

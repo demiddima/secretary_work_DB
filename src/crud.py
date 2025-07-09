@@ -242,7 +242,7 @@ async def clear_user_data(session: AsyncSession, user_id: int):
 # ---- Settings & Cleanup ----
 @retry_db
 async def get_cleanup_cron(session: AsyncSession):
-    stmt = select(Setting.cleanup_cron).where(Setting.id == 1)
+    stmt = select(Setting.value).where(Setting.id == 1)
     res = await session.execute(stmt)
     return res.scalar_one_or_none() or '0 3 * * 6'
 
@@ -284,13 +284,44 @@ async def increment_link_visit(session: AsyncSession, link_key: str) -> Link:
     return link
 
 @retry_db
+async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> models.Offer:
+    income = data.income
+    expense = data.expense
+    payout = income - expense - (income * 0.06)
+    tax = income * 0.06
+    to_you = payout * 0.335
+    to_ludochat = payout * 0.335
+    to_manager = payout * 0.33
+
+    obj = models.Offer(
+        name=data.name,
+        income=income,
+        expense=expense,
+        payout=payout,
+        tax=tax,
+        to_you=to_you,
+        to_ludochat=to_ludochat,
+        to_manager=to_manager
+    )
+    session.add(obj)
+    await session.commit()
+    await session.refresh(obj)
+    return obj
+
+
+@retry_db
 async def create_request(
     session: AsyncSession,
     data: schemas.RequestCreate
 ) -> models.Request:
+    # проверим, что оффер существует
+    offer = await session.get(models.Offer, data.offer_id)
+    if not offer:
+        raise HTTPException(status_code=404, detail="Offer not found")
+
     obj = models.Request(
         user_id=data.user_id,
-        offer_name=data.offer_name
+        offer_id=data.offer_id,
     )
     session.add(obj)
     await session.commit()
@@ -312,15 +343,16 @@ async def update_request_status(
     await session.refresh(obj)
     return obj
 
+
 @retry_db
 async def create_reminder_setting(
     session: AsyncSession,
     data: schemas.ReminderSettingsCreate
 ) -> models.ReminderSetting:
-    # проверим, что заявка существует
     req = await session.get(models.Request, data.request_id)
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
+
     obj = models.ReminderSetting(
         request_id=data.request_id,
         first_notification_at=data.first_notification_at,
@@ -331,17 +363,18 @@ async def create_reminder_setting(
     await session.refresh(obj)
     return obj
 
+
 @retry_db
 async def create_notification(
     session: AsyncSession,
     data: schemas.NotificationCreate
 ) -> models.Notification:
-    # если дата не указана — ставим сейчас
     ts = data.notification_at or datetime.utcnow()
-    # проверим, что заявка существует
+
     req = await session.get(models.Request, data.request_id)
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
+
     obj = models.Notification(
         request_id=data.request_id,
         notification_at=ts

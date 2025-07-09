@@ -13,7 +13,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 @router.post("/", response_model=schemas.NotificationModel, summary="Создать оповещение")
 async def create_notification(
     data: schemas.NotificationCreate,
-    session: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_session)
 ):
     try:
         return await crud.create_notification(session, data)
