@@ -74,6 +74,7 @@ class SettingModel(BaseModel):
 
 class OfferCreate(BaseModel):
     name: str
+    total_sum: float
     income: float
     expense: float
 

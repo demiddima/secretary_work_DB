@@ -301,9 +301,11 @@ async def get_offer_by_id(session: AsyncSession, offer_id: int) -> models.Offer:
 
 @retry_db
 async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> models.Offer:
-    # рассчитываем поля
+    # Используем переданные значения
     income = data.income
     expense = data.expense
+    total_sum = data.total_sum
+
     tax = income * 0.06
     payout = income - expense - tax
     to_you = payout * 0.335
@@ -312,6 +314,7 @@ async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> mode
 
     obj = models.Offer(
         name=data.name,
+        total_sum=total_sum,
         income=income,
         expense=expense,
         payout=payout,
@@ -336,13 +339,15 @@ async def update_offer(
     if not obj:
         raise HTTPException(status_code=404, detail="Offer not found")
 
-    # обновляем базовые поля и пересчитываем вычисляемые
+    # Обновляем значения
     obj.name = data.name
+    obj.total_sum = data.total_sum
     obj.income = data.income
     obj.expense = data.expense
 
-    tax = data.income * 0.06
-    payout = data.income - data.expense - tax
+    # Пересчитываем другие значения на основе income и expense
+    tax = obj.income * 0.06
+    payout = obj.income - obj.expense - tax
     obj.tax = tax
     obj.payout = payout
     obj.to_you = payout * 0.335

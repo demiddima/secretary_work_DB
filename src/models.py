@@ -103,13 +103,14 @@ class Offer(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(128), nullable=False)
-    income = Column(Float, nullable=False)   # Оборот
-    expense = Column(Float, nullable=False)  # Расход
+    total_sum = Column(Float, nullable=False)  # Общая сумма
+    income = Column(Float, nullable=False)     # Оборот
+    expense = Column(Float, nullable=False)    # Расход
 
-    payout = Column(Float, nullable=False)        # Выплата
-    to_you = Column(Float, nullable=False)        # Вам
-    to_ludochat = Column(Float, nullable=False)   # Лудочат
-    to_manager = Column(Float, nullable=False)    # Менеджер
-    tax = Column(Float, nullable=False)           # Налог
+    payout = Column(Float, nullable=False)     # Выплата
+    to_you = Column(Float, nullable=False)     # Вам
+    to_ludochat = Column(Float, nullable=False)  # Лудочат
+    to_manager = Column(Float, nullable=False)  # Менеджер
+    tax = Column(Float, nullable=False)        # Налог
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
