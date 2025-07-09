@@ -515,10 +515,17 @@ async def create_reminder_setting(
     session: AsyncSession,
     data: schemas.ReminderSettingsCreate
 ) -> models.ReminderSetting:
-    req = await session.get(models.Request, data.request_id)
-    if not req:
-        raise HTTPException(status_code=404, detail="Request not found")
+    # Проверяем, существует ли уже запись с таким request_id
+    existing_reminder = await session.execute(
+        select(models.ReminderSetting).filter(models.ReminderSetting.request_id == data.request_id)
+    )
+    existing_reminder = existing_reminder.scalars().first()
 
+    if existing_reminder:
+        # Если запись существует, возвращаем её (или обновляем, если нужно)
+        return existing_reminder
+    
+    # Если записи нет, создаём новую
     obj = models.ReminderSetting(
         request_id=data.request_id,
         first_notification_at=data.first_notification_at,

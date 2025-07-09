@@ -42,11 +42,12 @@ async def upsert_reminder_setting(
     session: AsyncSession = Depends(get_session)
 ):
     try:
-        return await crud.create_reminder_setting(session, data)
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception(f"Не удалось создать настройку напоминания для request_id={data.request_id}")
+        # Попытаться создать или обновить настройку напоминания
+        reminder = await crud.create_reminder_setting(session, data)
+        await session.commit()
+        return reminder
+    except Exception as e:
+        logger.exception(f"Не удалось создать/обновить настройку напоминания для request_id={data.request_id}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 @router.put("/{setting_id}", response_model=schemas.ReminderSettingsModel, summary="Полное обновление настройки напоминания")
