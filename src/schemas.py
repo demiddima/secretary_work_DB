@@ -129,7 +129,7 @@ class RequestCreate(BaseModel):
     offer_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RequestModel(BaseModel):
@@ -140,7 +140,7 @@ class RequestModel(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RequestUpdate(BaseModel):
@@ -149,7 +149,7 @@ class RequestUpdate(BaseModel):
     is_completed: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RequestPatch(BaseModel):
@@ -158,7 +158,7 @@ class RequestPatch(BaseModel):
     is_completed: Optional[bool] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # -------------------- REMINDER SETTINGS --------------------
@@ -169,7 +169,7 @@ class ReminderSettingsCreate(BaseModel):
     frequency_hours: int
 
     class Config:
-        orm_mode = True  # Для правильной работы с SQLAlchemy объектами
+        from_attributes = True  # Для правильной работы с SQLAlchemy объектами
 
 
 class ReminderSettingsModel(BaseModel):
@@ -180,7 +180,7 @@ class ReminderSettingsModel(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ReminderSettingsUpdate(BaseModel):
@@ -189,7 +189,7 @@ class ReminderSettingsUpdate(BaseModel):
     frequency_hours: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ReminderSettingsPatch(BaseModel):
@@ -198,7 +198,7 @@ class ReminderSettingsPatch(BaseModel):
     frequency_hours: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # -------------------- NOTIFICATION --------------------
@@ -208,7 +208,7 @@ class NotificationCreate(BaseModel):
     notification_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True  # Для правильной работы с SQLAlchemy объектами
+        from_attributes = True  # Для правильной работы с SQLAlchemy объектами
 
 
 class NotificationModel(BaseModel):
@@ -218,7 +218,7 @@ class NotificationModel(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class NotificationUpdate(BaseModel):
@@ -226,7 +226,7 @@ class NotificationUpdate(BaseModel):
     notification_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class NotificationPatch(BaseModel):
@@ -234,4 +234,4 @@ class NotificationPatch(BaseModel):
     notification_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
