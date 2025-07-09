@@ -302,20 +302,21 @@ async def get_offer_by_id(session: AsyncSession, offer_id: int) -> models.Offer:
 @retry_db
 async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> models.Offer:
     # Используем переданные значения
-    turnover = data.turnover  # Переименовано с income
-    expense = data.expense
     total_sum = data.total_sum
+    expense = data.expense
 
-    tax = turnover * 0.06  # Рассчитываем на основе turnover
-    payout = turnover - expense - tax
-    to_you = payout * 0.335
-    to_ludochat = payout * 0.335
-    to_manager = payout * 0.33
+    # Применяем бизнес-логику
+    tax = total_sum * 0.06  # Налог
+    payout = total_sum - expense - tax  # Выплата
+    to_you = payout * 0.335  # Вам
+    to_ludochat = payout * 0.335  # Лудочат
+    to_manager = payout * 0.33  # Менеджер
 
+    # Создаем объект Offer
     obj = models.Offer(
         name=data.name,
         total_sum=total_sum,
-        turnover=turnover,  # Используем turnover
+        turnover=data.turnover,  # Переименовано с income
         expense=expense,
         payout=payout,
         tax=tax,
@@ -345,9 +346,9 @@ async def update_offer(
     obj.turnover = data.turnover  # Обновляем turnover
     obj.expense = data.expense
 
-    # Пересчитываем другие значения на основе turnover и expense
-    tax = obj.turnover * 0.06
-    payout = obj.turnover - obj.expense - tax
+    # Пересчитываем другие значения на основе total_sum, expense и turnover
+    tax = obj.total_sum * 0.06
+    payout = obj.total_sum - obj.expense - tax
     obj.tax = tax
     obj.payout = payout
     obj.to_you = payout * 0.335
@@ -379,8 +380,8 @@ async def patch_offer(
 
     # если изменился turnover или expense — пересчитываем всё
     if data.turnover is not None or data.expense is not None:
-        tax = obj.turnover * 0.06
-        payout = obj.turnover - obj.expense - tax
+        tax = obj.total_sum * 0.06
+        payout = obj.total_sum - obj.expense - tax
         obj.tax = tax
         obj.payout = payout
         obj.to_you = payout * 0.335
@@ -400,6 +401,7 @@ async def delete_offer(session: AsyncSession, offer_id: int) -> None:
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Offer not found")
     await session.commit()
+
 
 
 
