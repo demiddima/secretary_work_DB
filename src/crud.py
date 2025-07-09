@@ -302,12 +302,12 @@ async def get_offer_by_id(session: AsyncSession, offer_id: int) -> models.Offer:
 @retry_db
 async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> models.Offer:
     # Используем переданные значения
-    income = data.income
+    turnover = data.turnover  # Переименовано с income
     expense = data.expense
     total_sum = data.total_sum
 
-    tax = income * 0.06
-    payout = income - expense - tax
+    tax = turnover * 0.06  # Рассчитываем на основе turnover
+    payout = turnover - expense - tax
     to_you = payout * 0.335
     to_ludochat = payout * 0.335
     to_manager = payout * 0.33
@@ -315,7 +315,7 @@ async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> mode
     obj = models.Offer(
         name=data.name,
         total_sum=total_sum,
-        income=income,
+        turnover=turnover,  # Используем turnover
         expense=expense,
         payout=payout,
         tax=tax,
@@ -342,12 +342,12 @@ async def update_offer(
     # Обновляем значения
     obj.name = data.name
     obj.total_sum = data.total_sum
-    obj.income = data.income
+    obj.turnover = data.turnover  # Обновляем turnover
     obj.expense = data.expense
 
-    # Пересчитываем другие значения на основе income и expense
-    tax = obj.income * 0.06
-    payout = obj.income - obj.expense - tax
+    # Пересчитываем другие значения на основе turnover и expense
+    tax = obj.turnover * 0.06
+    payout = obj.turnover - obj.expense - tax
     obj.tax = tax
     obj.payout = payout
     obj.to_you = payout * 0.335
@@ -372,15 +372,15 @@ async def patch_offer(
     # частично обновляем поля
     if data.name is not None:
         obj.name = data.name
-    if data.income is not None:
-        obj.income = data.income
+    if data.turnover is not None:  # Переименовано с income
+        obj.turnover = data.turnover
     if data.expense is not None:
         obj.expense = data.expense
 
-    # если изменился доход или расход — пересчитать всё
-    if data.income is not None or data.expense is not None:
-        tax = obj.income * 0.06
-        payout = obj.income - obj.expense - tax
+    # если изменился turnover или expense — пересчитываем всё
+    if data.turnover is not None or data.expense is not None:
+        tax = obj.turnover * 0.06
+        payout = obj.turnover - obj.expense - tax
         obj.tax = tax
         obj.payout = payout
         obj.to_you = payout * 0.335
@@ -400,6 +400,7 @@ async def delete_offer(session: AsyncSession, offer_id: int) -> None:
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Offer not found")
     await session.commit()
+
 
 
 # -------------------- REQUEST --------------------

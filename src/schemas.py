@@ -75,7 +75,7 @@ class SettingModel(BaseModel):
 class OfferCreate(BaseModel):
     name: str
     total_sum: float
-    income: float
+    turnover: float  # Переименовано с income
     expense: float
 
     model_config = ConfigDict(from_attributes=True)
@@ -84,7 +84,7 @@ class OfferCreate(BaseModel):
 class OfferModel(BaseModel):
     id: int
     name: str
-    income: float
+    turnover: float  # Переименовано с income
     expense: float
     payout: float
     to_you: float
@@ -98,7 +98,7 @@ class OfferModel(BaseModel):
 
 class OfferUpdate(BaseModel):
     name: str
-    income: float
+    turnover: float  # Переименовано с income
     expense: float
     payout: float
     to_you: float
@@ -107,6 +107,20 @@ class OfferUpdate(BaseModel):
     tax: float
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OfferPatch(BaseModel):
+    name: Optional[str] = None
+    turnover: Optional[float] = None  # Переименовано с income
+    expense: Optional[float] = None
+    payout: Optional[float] = None
+    to_you: Optional[float] = None
+    to_ludochat: Optional[float] = None
+    to_manager: Optional[float] = None
+    tax: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 class OfferPatch(BaseModel):
