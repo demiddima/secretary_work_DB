@@ -82,17 +82,21 @@ class Request(Base):
 class ReminderSetting(Base):
     __tablename__ = 'reminder_settings'
 
-    request_id              = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), primary_key=True)
-    first_notification_at   = Column(DateTime, nullable=False)
-    frequency_hours         = Column(Integer, nullable=False)
-    created_at              = Column(DateTime, server_default=func.now(), nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)  # Добавляем поле id
+    request_id = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), nullable=False)
+    first_notification_at = Column(DateTime, nullable=False)
+    frequency_hours = Column(Integer, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
 
 class Notification(Base):
     __tablename__ = 'notifications'
 
-    request_id       = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), primary_key=True)
-    notification_at  = Column(DateTime, nullable=False)
-    created_at       = Column(DateTime, server_default=func.now(), nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)  # Добавляем поле id
+    request_id = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), nullable=False)
+    notification_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
 
 class Offer(Base):
     __tablename__ = 'offers'

@@ -127,7 +127,8 @@ class RequestCreate(BaseModel):
     user_id: int
     offer_id: int
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class RequestModel(BaseModel):
@@ -137,7 +138,8 @@ class RequestModel(BaseModel):
     is_completed: bool
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class RequestUpdate(BaseModel):
@@ -145,7 +147,8 @@ class RequestUpdate(BaseModel):
     offer_id: int
     is_completed: bool
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class RequestPatch(BaseModel):
@@ -153,7 +156,8 @@ class RequestPatch(BaseModel):
     offer_id: Optional[int] = None
     is_completed: Optional[bool] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 # -------------------- REMINDER SETTINGS --------------------
@@ -163,7 +167,8 @@ class ReminderSettingsCreate(BaseModel):
     first_notification_at: datetime
     frequency_hours: int
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True  # Для правильной работы с SQLAlchemy объектами
 
 
 class ReminderSettingsModel(BaseModel):
@@ -173,7 +178,8 @@ class ReminderSettingsModel(BaseModel):
     frequency_hours: int
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class ReminderSettingsUpdate(BaseModel):
@@ -181,7 +187,8 @@ class ReminderSettingsUpdate(BaseModel):
     first_notification_at: datetime
     frequency_hours: int
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class ReminderSettingsPatch(BaseModel):
@@ -189,7 +196,8 @@ class ReminderSettingsPatch(BaseModel):
     first_notification_at: Optional[datetime] = None
     frequency_hours: Optional[int] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 # -------------------- NOTIFICATION --------------------
@@ -198,7 +206,8 @@ class NotificationCreate(BaseModel):
     request_id: int
     notification_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True  # Для правильной работы с SQLAlchemy объектами
 
 
 class NotificationModel(BaseModel):
@@ -207,18 +216,21 @@ class NotificationModel(BaseModel):
     notification_at: datetime
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class NotificationUpdate(BaseModel):
     request_id: int
     notification_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
 
 
 class NotificationPatch(BaseModel):
     request_id: Optional[int] = None
     notification_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        orm_mode = True
