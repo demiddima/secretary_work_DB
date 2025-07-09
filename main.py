@@ -1,4 +1,6 @@
+# src/main.py
 # commit: добавлен handler для RequestValidationError с логированием тела и ошибок валидации
+
 import logging
 import src.logger  # настраивает консольный лог и TelegramHandler
 from fastapi import FastAPI, Request
@@ -8,7 +10,11 @@ from contextlib import asynccontextmanager
 from builtins import BaseExceptionGroup
 from sqlalchemy.exc import IntegrityError
 
-from src.exceptions import handle_integrity_error, handle_global_exception, register_exception_handlers
+from src.exceptions import (
+    handle_integrity_error,
+    handle_global_exception,
+    register_exception_handlers,
+)
 from src.database import init_db
 from src.scheduler import setup_scheduler
 from src.routers import (
@@ -26,6 +32,7 @@ async def lifespan(app: FastAPI):
     yield
     # при остановке можно добавить cleanup, если потребуется
 
+# создаём приложение без явного указания title
 app = FastAPI(title="DB Service API", lifespan=lifespan)
 
 # Регистрация обработчика валидационных ошибок RequestValidationError

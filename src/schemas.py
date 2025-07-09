@@ -83,25 +83,42 @@ class OfferCreate(BaseModel):
 class OfferModel(BaseModel):
     id: int
     name: str
-    income: float       # Оборот
-    expense: float      # Расход
-    payout: float       # Выплата
-    to_you: float       # Вам
-    to_ludochat: float  # Лудочат
-    to_manager: float   # Менеджер
-    tax: float          # Налог
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-# Модель для вывода — с расчётами
-class OfferModelOut(OfferModel):
+    income: float
+    expense: float
     payout: float
     to_you: float
     to_ludochat: float
     to_manager: float
     tax: float
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OfferUpdate(BaseModel):
+    name: str
+    income: float
+    expense: float
+    payout: float
+    to_you: float
+    to_ludochat: float
+    to_manager: float
+    tax: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OfferPatch(BaseModel):
+    name: Optional[str] = None
+    income: Optional[float] = None
+    expense: Optional[float] = None
+    payout: Optional[float] = None
+    to_you: Optional[float] = None
+    to_ludochat: Optional[float] = None
+    to_manager: Optional[float] = None
+    tax: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # -------------------- REQUEST --------------------
@@ -113,21 +130,33 @@ class RequestCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class RequestModel(RequestCreate):
+class RequestModel(BaseModel):
     id: int
+    user_id: int
+    offer_id: int
     is_completed: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class RequestStatusUpdate(BaseModel):
+class RequestUpdate(BaseModel):
+    user_id: int
+    offer_id: int
     is_completed: bool
 
     model_config = ConfigDict(from_attributes=True)
 
 
-# -------------------- REMINDER --------------------
+class RequestPatch(BaseModel):
+    user_id: Optional[int] = None
+    offer_id: Optional[int] = None
+    is_completed: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# -------------------- REMINDER SETTINGS --------------------
 
 class ReminderSettingsCreate(BaseModel):
     request_id: int
@@ -137,8 +166,28 @@ class ReminderSettingsCreate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ReminderSettingsModel(ReminderSettingsCreate):
+class ReminderSettingsModel(BaseModel):
+    id: int
+    request_id: int
+    first_notification_at: datetime
+    frequency_hours: int
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReminderSettingsUpdate(BaseModel):
+    request_id: int
+    first_notification_at: datetime
+    frequency_hours: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReminderSettingsPatch(BaseModel):
+    request_id: Optional[int] = None
+    first_notification_at: Optional[datetime] = None
+    frequency_hours: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -147,14 +196,29 @@ class ReminderSettingsModel(ReminderSettingsCreate):
 
 class NotificationCreate(BaseModel):
     request_id: int
-    notification_at: Optional[datetime] = None  # если None — ставим текущую дату
+    notification_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class NotificationModel(BaseModel):
+    id: int
     request_id: int
     notification_at: datetime
     created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationUpdate(BaseModel):
+    request_id: int
+    notification_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationPatch(BaseModel):
+    request_id: Optional[int] = None
+    notification_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
