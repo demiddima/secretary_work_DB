@@ -131,6 +131,23 @@ async def remove_user_from_chat(session: AsyncSession, user_id: int, chat_id: in
             .where(UserMembership.user_id == user_id)
             .where(UserMembership.chat_id == chat_id)
         )
+        
+@retry_db
+async def is_user_in_chat(
+    session: AsyncSession,
+    user_id: int,
+    chat_id: int
+) -> bool:
+    """
+    Возвращает True, если в таблице memberships есть запись
+    для пары (user_id, chat_id), иначе False.
+    """
+    stmt = select(UserMembership).where(
+        UserMembership.user_id == user_id,
+        UserMembership.chat_id == chat_id
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none() is not None
 
 # ---- Invite Links ----
 @retry_db
