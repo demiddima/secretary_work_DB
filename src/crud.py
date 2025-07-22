@@ -63,32 +63,41 @@ async def get_all_chats(session: AsyncSession):
     return [row[0] for row in res.all()]
 
 # ---- Users ----
+@retry_db
 async def upsert_user(
     session: AsyncSession,
     *,
     id: int,
     username: str | None,
     full_name: str | None,
-    terms_accepted: bool = False
+    terms_accepted: bool | None = None
 ) -> User:
+    # если клиент не указал terms_accepted — по умолчанию вставляем False
+    terms_val = False if terms_accepted is None else terms_accepted
+
+    # INSERT ... ON DUPLICATE KEY UPDATE
     stmt = mysql_insert(User).values(
         id=id,
         username=username,
         full_name=full_name,
-        terms_accepted=terms_accepted
-    )
-    # при конфликте по PRIMARY KEY обновляем все поля
-    stmt = stmt.on_duplicate_key_update(
-        username=stmt.inserted.username,
-        full_name=stmt.inserted.full_name,
-        terms_accepted=stmt.inserted.terms_accepted
+        terms_accepted=terms_val
     )
 
-    # выполняем upsert
+    # Поля, которые всегда обновляем
+    update_fields: dict[str, any] = {
+        "username": stmt.inserted.username,
+        "full_name": stmt.inserted.full_name,
+    }
+    # Обновляем terms_accepted только если клиент передал его явно
+    if terms_accepted is not None:
+        update_fields["terms_accepted"] = stmt.inserted.terms_accepted
+
+    stmt = stmt.on_duplicate_key_update(**update_fields)
+
     await session.execute(stmt)
     await session.commit()
 
-    # возвращаем актуальный объект
+    # Возвращаем актуальный объект из базы
     return await session.get(User, id)
 
 @retry_db
@@ -155,7 +164,7 @@ async def save_invite_link(
     session: AsyncSession, user_id: int, chat_id: int,
     invite_link: str, created_at, expires_at
 ):
-    stmt = insert(InviteLink).values(
+    stmt = mysql_insert(InviteLink).values(
         user_id=user_id,
         chat_id=chat_id,
         invite_link=invite_link,

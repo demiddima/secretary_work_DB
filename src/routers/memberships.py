@@ -13,7 +13,7 @@ router = APIRouter(
     tags=["memberships"]
 )
 
-FILE_NAME = "MEMMBERSHIPS"
+FILE_NAME = "MEMBERSHIPS"
 
 
 @router.post("/", response_model=None)
