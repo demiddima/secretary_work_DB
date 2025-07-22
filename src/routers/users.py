@@ -14,27 +14,28 @@ router = APIRouter(
     tags=["users"]
 )
 
-# Создание или обновление пользователя
-@router.put("/{user_id}/upsert", response_model=UserModel)
+@router.put("/{user_id}", response_model=UserModel)
+@router.put("/{user_id}/upsert", include_in_schema=False)
 async def upsert_user(
     user_id: int,
     user: UserModel,
     session: AsyncSession = Depends(get_session)
 ):
     try:
-        # Логируем входящий запрос
-        logger.info(f"[{user_id}] - [PUT /users/{user_id}/upsert] Входящий запрос для создания или обновления пользователя: {user.dict()}")
-
-        # Обрабатываем запрос
-        db_user = await crud.upsert_user(session, id=user_id, username=user.username, full_name=user.full_name)
-
-        # Логируем исходящий ответ
-        logger.info(f"[{user_id}] - [PUT /users/{user_id}/upsert] Исходящий ответ: {user_to_dict(db_user)}")
+        logger.info(f"[{user_id}] PUT /users/{user_id} → {user.dict()}")
+        db_user = await crud.upsert_user(
+            session,
+            id=user_id,
+            username=user.username,
+            full_name=user.full_name,
+            terms_accepted=user.terms_accepted
+        )
+        logger.info(f"[{user_id}] ← {user_to_dict(db_user)}")
         return db_user
     except Exception as e:
-        # Логируем ошибку
-        logger.error(f"[{user_id}] - [PUT /users/{user_id}/upsert] Ошибка при обновлении пользователя: {str(e)}")
-        raise HTTPException(status_code=500, detail="Ошибка при обновлении пользователя")
+        logger.error(f"[{user_id}] ERROR upsert: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при сохранении пользователя")
+
 
 # Получить пользователя по ID
 @router.get("/{user_id}", response_model=UserModel)

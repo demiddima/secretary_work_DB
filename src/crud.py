@@ -3,9 +3,10 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import select, delete, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
-from sqlalchemy.dialects.mysql import insert
+
 from datetime import datetime
 from . import models, schemas
+from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from .models import (
     Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link, Request, ReminderSetting, Notification
@@ -62,28 +63,33 @@ async def get_all_chats(session: AsyncSession):
     return [row[0] for row in res.all()]
 
 # ---- Users ----
-async def upsert_user(session: AsyncSession,
-                      id: int,
-                      username: str | None,
-                      full_name: str | None,
-                      terms_accepted: bool = False):
-    async with session.begin():
-        stmt = select(User).where(User.id == id)
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
-        if user:
-            user.username = username
-            user.full_name = full_name
-            user.terms_accepted = terms_accepted
-        else:
-            user = User(
-                id=id,
-                username=username,
-                full_name=full_name,
-                terms_accepted=terms_accepted
-            )
-            session.add(user)
-    return user
+async def upsert_user(
+    session: AsyncSession,
+    *,
+    id: int,
+    username: str | None,
+    full_name: str | None,
+    terms_accepted: bool = False
+) -> User:
+    stmt = mysql_insert(User).values(
+        id=id,
+        username=username,
+        full_name=full_name,
+        terms_accepted=terms_accepted
+    )
+    # при конфликте по PRIMARY KEY обновляем все поля
+    stmt = stmt.on_duplicate_key_update(
+        username=stmt.inserted.username,
+        full_name=stmt.inserted.full_name,
+        terms_accepted=stmt.inserted.terms_accepted
+    )
+
+    # выполняем upsert
+    await session.execute(stmt)
+    await session.commit()
+
+    # возвращаем актуальный объект
+    return await session.get(User, id)
 
 @retry_db
 async def get_user(session: AsyncSession, id: int):
