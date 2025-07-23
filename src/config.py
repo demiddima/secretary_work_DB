@@ -10,7 +10,6 @@ class Settings(BaseSettings):
     POOL_MIN_SIZE: int = Field(1, env='POOL_MIN_SIZE')
     POOL_MAX_SIZE: int = Field(10, env='POOL_MAX_SIZE')
 
-    LOG_LEVEL: str = Field('INFO', env='LOG_LEVEL')
     TELEGRAM_BOT_TOKEN: str = Field(..., env='TELEGRAM_BOT_TOKEN')
     LOG_CHANNEL_ID: int = Field(..., env='LOG_CHANNEL_ID')
 

@@ -14,7 +14,7 @@ engine = create_async_engine(
     pool_size=settings.POOL_MIN_SIZE,
     max_overflow=settings.POOL_MAX_SIZE,
     pool_pre_ping=True,
-    echo=(settings.LOG_LEVEL == "DEBUG"),
+    echo=False,
 )
 
 # Фабрика сессий
