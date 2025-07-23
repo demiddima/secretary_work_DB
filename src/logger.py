@@ -73,6 +73,10 @@ def configure_logging() -> None:
     # Добавляем фильтр, чтобы BadStatusLine не шёл в Telegram
     th.addFilter(IgnoreBadStatusLineFilter())
     root.addHandler(th)
+    
+    # Убираем детальные логи HTTPX и Aiogram
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("aiogram").setLevel(logging.WARNING)
 
 # Initialize on import
 configure_logging()

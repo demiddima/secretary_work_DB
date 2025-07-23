@@ -14,28 +14,33 @@ router = APIRouter(
     tags=["users"]
 )
 
-@router.put("/{user_id}", response_model=UserModel)
-@router.put("/{user_id}/upsert", include_in_schema=False)
+@router.put("/{user_id}/upsert", response_model=UserModel)
 async def upsert_user(
     user_id: int,
-    user: UserModel,
-    session: AsyncSession = Depends(get_session)
+    user: UserModel = Body(...),
+    session: AsyncSession = Depends(get_session),
 ):
-    try:
-        logger.info(f"[{user_id}] PUT /users/{user_id} → {user.dict()}")
-        db_user = await crud.upsert_user(
-            session,
-            id=user_id,
-            username=user.username,
-            full_name=user.full_name,
-            terms_accepted=user.terms_accepted
-        )
-        logger.info(f"[{user_id}] ← {user_to_dict(db_user)}")
-        return db_user
-    except Exception as e:
-        logger.error(f"[{user_id}] ERROR upsert: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка при сохранении пользователя")
+    logger.info(f"[{user_id}] PUT /users/{user_id}/upsert → {user.dict()}")
+    db_user = await crud.upsert_user(
+        session,
+        id=user_id,
+        username=user.username,
+        full_name=user.full_name,
+        terms_accepted=user.terms_accepted,
+    )
+    logger.info(f"[{user_id}] ← {user_to_dict(db_user)}")
+    return db_user
 
+@router.put("/{user_id}", response_model=None)
+async def update_user(
+    user_id: int,
+    user: UserUpdate = Body(...),
+    session: AsyncSession = Depends(get_session),
+):
+    logger.info(f"[{user_id}] - [PUT /users/{user_id}] Входящий запрос: {user.dict(exclude_none=True)}")
+    await crud.update_user(session, id=user_id, **user.dict(exclude_none=True))
+    logger.info(f"[{user_id}] - [PUT /users/{user_id}] Исходящий ответ: {{'ok': True}}")
+    return {"ok": True}
 
 # Получить пользователя по ID
 @router.get("/{user_id}", response_model=UserModel)

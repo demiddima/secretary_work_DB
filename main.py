@@ -46,11 +46,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.middleware("http")
 async def catch_all_exceptions(request: Request, call_next):
-    """
-    Универсальный middleware: ловит любые исключения,
-    разворачивает BaseExceptionGroup (Python 3.11+),
-    отделяет IntegrityError и прокидывает в ваши хендлеры.
-    """
     try:
         return await call_next(request)
     except BaseExceptionGroup as eg:
