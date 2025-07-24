@@ -123,19 +123,17 @@ async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int)
         UserMembership.user_id == user_id,
         UserMembership.chat_id == chat_id
     )
-    # Сначала ищем вне транзакции (можно и внутри, но так чище для идемпотентности)
     res = await session.execute(stmt)
     membership = res.scalar_one_or_none()
     if membership is not None:
         return membership
 
+    membership = UserMembership(user_id=user_id, chat_id=chat_id)
+    session.add(membership)
     try:
-        async with session.begin():
-            membership = UserMembership(user_id=user_id, chat_id=chat_id)
-            session.add(membership)
-            await session.flush()  # ловим IntegrityError, если вдруг гонка
+        await session.flush()
     except IntegrityError:
-        # Сессия всё ещё открыта, просто ищем объект снова
+        # Не делаем rollback! Просто ищем объект ещё раз.
         res = await session.execute(stmt)
         membership = res.scalar_one()
     return membership
