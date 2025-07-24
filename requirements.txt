@@ -13,3 +13,4 @@ apscheduler
 pytz
 python-jose[cryptography]
 passlib[bcrypt]
+aiohttp>=3.8
