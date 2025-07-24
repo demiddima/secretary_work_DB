@@ -1,5 +1,5 @@
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, IntegrityError
 from sqlalchemy import select, delete, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
@@ -126,9 +126,18 @@ async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int)
         )
         res = await session.execute(stmt)
         membership = res.scalar_one_or_none()
-        if membership is None:
-            membership = UserMembership(user_id=user_id, chat_id=chat_id)
-            session.add(membership)
+        if membership is not None:
+            return membership
+
+        membership = UserMembership(user_id=user_id, chat_id=chat_id)
+        session.add(membership)
+        try:
+            await session.flush()  # flush, чтобы поймать ошибку в рамках транзакции session.begin()
+        except IntegrityError:
+            await session.rollback()
+            # Параллельно добавили запись — достаём существующую
+            res = await session.execute(stmt)
+            membership = res.scalar_one()
     return membership
 
 @retry_db
