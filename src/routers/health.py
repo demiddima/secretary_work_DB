@@ -1,39 +1,42 @@
 # src/routers/health.py
+
 from fastapi import APIRouter, HTTPException
 import logging
 
-# Настроим логгер (используем корневой логгер)
-logger = logging.getLogger()
+router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    tags=["health"]
-)
 
 @router.get("/", tags=["health"])
 async def root():
-    logger.info(f"[GET /] Входящий запрос для проверки статуса сервиса.")
-    
-    response = {"status": "ok"}
-    
-    logger.info(f"[GET /] Исходящий ответ: {response}")
-    return response
+    try:
+        response = {"status": "ok"}
+        # Логируем только важный выход: статус сервиса
+        logger.info(f"[GET /] Статус сервиса: {response}")
+        return response
+    except Exception as e:
+        logger.error(f"[GET /] Ошибка при проверке статуса сервиса: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при проверке статуса сервиса")
+
 
 @router.get("/health", tags=["health"])
 async def health():
-    logger.info(f"[GET /health] Входящий запрос для проверки здоровья системы.")
-    
-    response = {"status": "healthy"}
-    
-    logger.info(f"[GET /health] Исходящий ответ: {response}")
-    return response
+    try:
+        response = {"status": "healthy"}
+        # Логируем только важный выход: статус здоровья системы
+        logger.info(f"[GET /health] Статус здоровья: {response}")
+        return response
+    except Exception as e:
+        logger.error(f"[GET /health] Ошибка при проверке состояния: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при проверке состояния системы")
+
 
 @router.get("/panic")
 async def panic():
-    logger.info(f"[GET /panic] Входящий запрос для имитации ошибки.")
-
-    # В данном случае просто генерируем RuntimeError для теста
     try:
+        # Здесь намеренно генерируем ошибку для теста
         raise RuntimeError("🔥 Это тестовый RuntimeError")
     except RuntimeError as e:
-        logger.error(f"[GET /panic] Ошибка: {str(e)}")
+        # Логируем только ошибку
+        logger.error(f"[GET /panic] Ошибка: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")

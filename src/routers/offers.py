@@ -1,134 +1,93 @@
 # src/routers/offers.py
+
 import logging
 from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import schemas, crud
 from ..dependencies import get_session
-from ..utils import offer_to_dict  # Импортируем функцию для преобразования данных
+from ..utils import offer_to_dict
 
-# Настроим логгер
-logger = logging.getLogger()
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/offers", tags=["offers"])
 
-# Список всех офферов
+
 @router.get("/", response_model=List[schemas.OfferModel], summary="Список офферов")
-async def list_offers(
-    session: AsyncSession = Depends(get_session)
-):
-    logger.info("[GET /offers/] Входящий запрос для получения списка офферов")
-    
+async def list_offers(session: AsyncSession = Depends(get_session)):
     try:
         result = await crud.get_all_offers(session)
-
-        # Логируем исходящий ответ
-        logger.info(f"[GET /offers/] Исходящий ответ: {result}")
+        data = [offer_to_dict(o) for o in result]
+        # Логируем только важный выход: список офферов
+        logger.info(f"[GET /offers/] Список офферов: {data}")
         return result
-    except Exception:
-        logger.exception("Не удалось получить список офферов")
+    except Exception as e:
+        logger.error(f"[GET /offers/] Ошибка при получении списка офферов: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-# Получить оффер по ID
-@router.get("/{offer_id}", response_model=schemas.OfferModel, summary="Получить оффер")
-async def get_offer(
-    offer_id: int,
-    session: AsyncSession = Depends(get_session)
-):
-    logger.info(f"[GET /offers/{offer_id}] Входящий запрос для получения оффера с id={offer_id}")
 
+@router.get("/{offer_id}", response_model=schemas.OfferModel, summary="Получить оффер")
+async def get_offer(offer_id: int, session: AsyncSession = Depends(get_session)):
     try:
         result = await crud.get_offer_by_id(session, offer_id)
-
-        # Логируем исходящий ответ
-        logger.info(f"[GET /offers/{offer_id}] Исходящий ответ: {offer_to_dict(result)}")
+        # Логируем только важный выход: данные оффера
+        logger.info(f"[GET /offers/{offer_id}] Оффер: {offer_to_dict(result)}")
         return result
     except HTTPException:
         raise
-    except Exception:
-        logger.exception(f"Не удалось получить оффер с id={offer_id}")
+    except Exception as e:
+        logger.error(f"[GET /offers/{offer_id}] Ошибка при получении оффера: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-# Создать или обновить оффер
+
 @router.post("/upsert", response_model=schemas.OfferModel, summary="Создать или обновить оффер")
-async def upsert_offer(
-    data: schemas.OfferCreate,
-    session: AsyncSession = Depends(get_session)
-):
-    logger.info(f"[POST /offers/upsert] Входящий запрос для создания или обновления оффера: {data.dict()}")
-
+async def upsert_offer(data: schemas.OfferCreate, session: AsyncSession = Depends(get_session)):
     try:
-        result = await crud.create_offer(session, data)
-
-        # Логируем исходящий ответ
-        logger.info(f"[POST /offers/upsert] Исходящий ответ: {offer_to_dict(result)}")
-        return result
+        # Логируем только важный вход: параметры оффера для создания/обновления
+        logger.info(f"[POST /offers/upsert] Данные оффера: {data.dict()}")
+        return await crud.create_offer(session, data)
     except HTTPException:
         raise
-    except Exception:
-        logger.exception(f"Не удалось создать или обновить оффер с name={data.name}")
+    except Exception as e:
+        logger.error(f"[POST /offers/upsert] Ошибка при создании или обновлении оффера: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-# Полное обновление оффера
+
 @router.put("/{offer_id}", response_model=schemas.OfferModel, summary="Полное обновление оффера")
-async def update_offer(
-    offer_id: int,
-    data: schemas.OfferUpdate,
-    session: AsyncSession = Depends(get_session)
-):
-    logger.info(f"[PUT /offers/{offer_id}] Входящий запрос для полного обновления оффера с id={offer_id}")
-
+async def update_offer(offer_id: int, data: schemas.OfferUpdate, session: AsyncSession = Depends(get_session)):
     try:
-        result = await crud.update_offer(session, offer_id, data)
-
-        # Логируем исходящий ответ
-        logger.info(f"[PUT /offers/{offer_id}] Исходящий ответ: {offer_to_dict(result)}")
-        return result
+        # Логируем только важный вход: параметры полного обновления
+        logger.info(f"[PUT /offers/{offer_id}] Данные для полного обновления: {data.dict()}")
+        return await crud.update_offer(session, offer_id, data)
     except HTTPException:
         raise
-    except Exception:
-        logger.exception(f"Не удалось полностью обновить оффер с id={offer_id}")
+    except Exception as e:
+        logger.error(f"[PUT /offers/{offer_id}] Ошибка при полном обновлении оффера: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-# Частичное обновление оффера
+
 @router.patch("/{offer_id}", response_model=schemas.OfferModel, summary="Частичное обновление оффера")
-async def patch_offer(
-    offer_id: int,
-    data: schemas.OfferPatch,
-    session: AsyncSession = Depends(get_session)
-):
-    logger.info(f"[PATCH /offers/{offer_id}] Входящий запрос для частичного обновления оффера с id={offer_id}")
-
+async def patch_offer(offer_id: int, data: schemas.OfferPatch, session: AsyncSession = Depends(get_session)):
     try:
-        result = await crud.patch_offer(session, offer_id, data)
-
-        # Логируем исходящий ответ
-        logger.info(f"[PATCH /offers/{offer_id}] Исходящий ответ: {offer_to_dict(result)}")
-        return result
+        # Логируем только важный вход: параметры частичного обновления
+        logger.info(f"[PATCH /offers/{offer_id}] Данные для частичного обновления: {data.dict()}")
+        return await crud.patch_offer(session, offer_id, data)
     except HTTPException:
         raise
-    except Exception:
-        logger.exception(f"Не удалось частично обновить оффер с id={offer_id}")
+    except Exception as e:
+        logger.error(f"[PATCH /offers/{offer_id}] Ошибка при частичном обновлении оффера: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
-# Удалить оффер по ID
-@router.delete("/{offer_id}", status_code=204, summary="Удалить оффер")
-async def delete_offer(
-    offer_id: int,
-    session: AsyncSession = Depends(get_session)
-):
-    logger.info(f"[DELETE /offers/{offer_id}] Входящий запрос для удаления оффера с id={offer_id}")
 
+@router.delete("/{offer_id}", status_code=204, summary="Удалить оффер")
+async def delete_offer(offer_id: int, session: AsyncSession = Depends(get_session)):
     try:
         await crud.delete_offer(session, offer_id)
-
-        # Логируем исходящий ответ
-        logger.info(f"[DELETE /offers/{offer_id}] Исходящий ответ: {{'ok': True}}")
+        # Логируем только важный выход: факт удаления оффера
+        logger.info(f"[DELETE /offers/{offer_id}] Оффер удалён")
         return {"ok": True}
     except HTTPException:
         raise
-    except Exception:
-        logger.exception(f"Не удалось удалить оффер с id={offer_id}")
+    except Exception as e:
+        logger.error(f"[DELETE /offers/{offer_id}] Ошибка при удалении оффера: {e}")
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")

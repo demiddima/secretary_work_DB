@@ -117,9 +117,8 @@ async def delete_user(session: AsyncSession, id: int):
     async with session.begin():
         await session.execute(delete(User).where(User.id == id))
 
-# ---- Memberships ----
 @retry_db
-async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int):
+async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int) -> UserMembership:
     async with session.begin():
         stmt = select(UserMembership).where(
             UserMembership.user_id == user_id,
@@ -127,7 +126,7 @@ async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int)
         )
         res = await session.execute(stmt)
         membership = res.scalar_one_or_none()
-        if not membership:
+        if membership is None:
             membership = UserMembership(user_id=user_id, chat_id=chat_id)
             session.add(membership)
     return membership
