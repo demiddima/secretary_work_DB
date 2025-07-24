@@ -119,25 +119,25 @@ async def delete_user(session: AsyncSession, id: int):
 
 @retry_db
 async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int) -> UserMembership:
-    async with session.begin():
-        stmt = select(UserMembership).where(
-            UserMembership.user_id == user_id,
-            UserMembership.chat_id == chat_id
-        )
-        res = await session.execute(stmt)
-        membership = res.scalar_one_or_none()
-        if membership is not None:
-            return membership
+    stmt = select(UserMembership).where(
+        UserMembership.user_id == user_id,
+        UserMembership.chat_id == chat_id
+    )
+    # Сначала ищем вне транзакции (можно и внутри, но так чище для идемпотентности)
+    res = await session.execute(stmt)
+    membership = res.scalar_one_or_none()
+    if membership is not None:
+        return membership
 
-        membership = UserMembership(user_id=user_id, chat_id=chat_id)
-        session.add(membership)
-        try:
-            await session.flush()  # flush, чтобы поймать ошибку в рамках транзакции session.begin()
-        except IntegrityError:
-            await session.rollback()
-            # Параллельно добавили запись — достаём существующую
-            res = await session.execute(stmt)
-            membership = res.scalar_one()
+    try:
+        async with session.begin():
+            membership = UserMembership(user_id=user_id, chat_id=chat_id)
+            session.add(membership)
+            await session.flush()  # ловим IntegrityError, если вдруг гонка
+    except IntegrityError:
+        # Сессия всё ещё открыта, просто ищем объект снова
+        res = await session.execute(stmt)
+        membership = res.scalar_one()
     return membership
 
 @retry_db
