@@ -44,9 +44,13 @@ class IgnoreBadStatusLineFilter(logging.Filter):
 
 
 class IgnoreNotHandledUpdatesFilter(logging.Filter):
-    """Игнорирует логи вида 'Update id=… is not handled.'."""
+    """Игнорирует логи вида 'Update id=… is not handled.' и 'Update id=… is handled. Duration…'."""
     def filter(self, record: logging.LogRecord) -> bool:
-        return "is not handled." not in record.getMessage()
+        msg = record.getMessage()
+        # не пропускаем, если это сообщение об обновлении – как не обработанном, так и обработанном
+        ignore_subs = ["is not handled.", "is handled. Duration"]
+        return not any(sub in msg for sub in ignore_subs)
+
 
 
 class IgnoreStaticPathsFilter(logging.Filter):
@@ -131,7 +135,7 @@ def configure_logging() -> None:
 
     # Логи доступа uvicorn (INFO+), игнорируем статику
     access_logger = logging.getLogger("uvicorn.access")
-    access_logger.setLevel(logging.INFO)
+    access_logger.setLevel(logging.WARNING)
     static_paths = ["/favicon.ico", "/robots.txt", "/sitemap.xml", "/config.json"]
     access_logger.addFilter(IgnoreStaticPathsFilter(static_paths))
 
