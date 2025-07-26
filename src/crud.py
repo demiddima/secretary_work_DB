@@ -133,9 +133,10 @@ async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int)
     try:
         await session.flush()
     except IntegrityError:
-        # Не делаем rollback! Просто ищем объект ещё раз.
         res = await session.execute(stmt)
         membership = res.scalar_one()
+
+    await session.commit()
     return membership
 
 @retry_db
