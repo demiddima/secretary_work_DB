@@ -297,16 +297,20 @@ async def set_cleanup_cron(session: AsyncSession, cron_str: str):
 
 @retry_db
 async def cleanup_orphan_users(session: AsyncSession):
-    # delete InviteLink entries and orphan Users without nested transaction
+    # Получаем ID пользователей, которые не состоят ни в одном чате
     subq = select(UserMembership.user_id)
-    stmt = select(User.id).where(~User.id.in_(subq))
+    stmt = select(User).where(~User.id.in_(subq))
     res = await session.execute(stmt)
-    user_ids = [row[0] for row in res.all()]
-    if user_ids:
-        await session.execute(delete(InviteLink).where(InviteLink.user_id.in_(user_ids)))
-        await session.execute(delete(User).where(User.id.in_(user_ids)))
-        await session.commit()
-    return user_ids
+    users_to_delete = res.scalars().all()
+
+    if not users_to_delete:
+        return []
+
+    for user in users_to_delete:
+        await session.delete(user)
+
+    await session.commit()
+    return [user.id for user in users_to_delete]
 
 @retry_db
 async def increment_link_visit(session: AsyncSession, link_key: str) -> Link:

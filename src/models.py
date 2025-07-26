@@ -1,4 +1,5 @@
 import sqlalchemy as sa
+from sqlalchemy.orm import relationship
 from sqlalchemy import (
     Column, BigInteger, String, DateTime, Boolean,
     SmallInteger, ForeignKey, UniqueConstraint, func, Integer,
@@ -22,6 +23,34 @@ class User(Base):
     username = Column(String(255))
     full_name = Column(String(255))
     terms_accepted = Column(Boolean, nullable=False, default=False)
+
+    memberships = relationship(
+        "UserMembership",
+        backref="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    invite_links = relationship(
+        "InviteLink",
+        primaryjoin="User.id == foreign(InviteLink.user_id)",
+        backref="user",
+        cascade="all, delete-orphan",
+    )
+
+    progress = relationship(
+        "UserAlgorithmProgress",
+        backref="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    requests = relationship(
+        "Request",
+        backref="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 class UserMembership(Base):
     __tablename__ = 'user_memberships'
@@ -78,6 +107,20 @@ class Request(Base):
     offer_id     = Column(Integer, ForeignKey('offers.id', ondelete='CASCADE'), nullable=False)
     is_completed = Column(Boolean, nullable=False, server_default=sa.text('0'))
     created_at   = Column(DateTime, server_default=func.now(), nullable=False)
+
+    reminders = relationship(
+        "ReminderSetting",
+        backref="request",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    notifications = relationship(
+        "Notification",
+        backref="request",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 class ReminderSetting(Base):
     __tablename__ = 'reminder_settings'
