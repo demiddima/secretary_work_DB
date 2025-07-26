@@ -133,6 +133,7 @@ async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int)
     try:
         await session.flush()
     except IntegrityError:
+        await session.rollback()
         res = await session.execute(stmt)
         membership = res.scalar_one()
 
