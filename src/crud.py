@@ -5,11 +5,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
 from datetime import datetime
-from . import models, schemas
+
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
+from .schemas import (
+    OfferCreate, OfferUpdate, OfferPatch, RequestCreate, RequestUpdate, RequestPatch, ReminderSettingsCreate, ReminderSettingsUpdate, 
+    ReminderSettingsPatch, NotificationCreate, NotificationUpdate, NotificationPatch, ScheduledAnnouncementCreate, ScheduledAnnouncementUpdate
+)
+
 from .models import (
-    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link, Request, ReminderSetting, Notification
+    Chat, User, UserMembership, InviteLink, UserAlgorithmProgress, Setting, Link, 
+    ScheduledAnnouncement, Request, ReminderSetting, Notification, Offer
 )
 
 # Retry configuration: up to 5 attempts, exponential backoff
@@ -330,21 +336,21 @@ async def increment_link_visit(session: AsyncSession, link_key: str) -> Link:
 # -------------------- OFFER --------------------
 
 @retry_db
-async def get_all_offers(session: AsyncSession) -> list[models.Offer]:
-    result = await session.execute(select(models.Offer))
+async def get_all_offers(session: AsyncSession) -> list[Offer]:
+    result = await session.execute(select(Offer))
     return result.scalars().all()
 
 
 @retry_db
-async def get_offer_by_id(session: AsyncSession, offer_id: int) -> models.Offer:
-    obj = await session.get(models.Offer, offer_id)
+async def get_offer_by_id(session: AsyncSession, offer_id: int) -> Offer:
+    obj = await session.get(Offer, offer_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Offer not found")
     return obj
 
 
 @retry_db
-async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> models.Offer:
+async def create_offer(session: AsyncSession, data: OfferCreate) -> Offer:
     # Используем переданные значения
     total_sum = data.total_sum
     expense = data.expense
@@ -357,7 +363,7 @@ async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> mode
     to_manager = payout * 0.33  # Менеджер
 
     # Создаем объект Offer
-    obj = models.Offer(
+    obj = Offer(
         name=data.name,
         total_sum=total_sum,
         turnover=data.turnover,  # Переименовано с income
@@ -378,9 +384,9 @@ async def create_offer(session: AsyncSession, data: schemas.OfferCreate) -> mode
 async def update_offer(
     session: AsyncSession,
     offer_id: int,
-    data: schemas.OfferUpdate
-) -> models.Offer:
-    obj = await session.get(models.Offer, offer_id)
+    data: OfferUpdate
+) -> Offer:
+    obj = await session.get(Offer, offer_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Offer not found")
 
@@ -408,9 +414,9 @@ async def update_offer(
 async def patch_offer(
     session: AsyncSession,
     offer_id: int,
-    data: schemas.OfferPatch
-) -> models.Offer:
-    obj = await session.get(models.Offer, offer_id)
+    data: OfferPatch
+) -> Offer:
+    obj = await session.get(Offer, offer_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Offer not found")
 
@@ -440,7 +446,7 @@ async def patch_offer(
 @retry_db
 async def delete_offer(session: AsyncSession, offer_id: int) -> None:
     result = await session.execute(
-        delete(models.Offer).where(models.Offer.id == offer_id)
+        delete(Offer).where(Offer.id == offer_id)
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Offer not found")
@@ -452,14 +458,14 @@ async def delete_offer(session: AsyncSession, offer_id: int) -> None:
 # -------------------- REQUEST --------------------
 
 @retry_db
-async def get_all_requests(session: AsyncSession) -> list[models.Request]:
-    result = await session.execute(select(models.Request))
+async def get_all_requests(session: AsyncSession) -> list[Request]:
+    result = await session.execute(select(Request))
     return result.scalars().all()
 
 
 @retry_db
-async def get_request_by_id(session: AsyncSession, request_id: int) -> models.Request:
-    obj = await session.get(models.Request, request_id)
+async def get_request_by_id(session: AsyncSession, request_id: int) -> Request:
+    obj = await session.get(Request, request_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Request not found")
     return obj
@@ -468,14 +474,14 @@ async def get_request_by_id(session: AsyncSession, request_id: int) -> models.Re
 @retry_db
 async def create_request(
     session: AsyncSession,
-    data: schemas.RequestCreate
-) -> models.Request:
+    data: RequestCreate
+) -> Request:
     # проверяем оффер
-    offer = await session.get(models.Offer, data.offer_id)
+    offer = await session.get(Offer, data.offer_id)
     if not offer:
         raise HTTPException(status_code=404, detail="Offer not found")
 
-    obj = models.Request(
+    obj = Request(
         user_id=data.user_id,
         offer_id=data.offer_id,
     )
@@ -489,9 +495,9 @@ async def create_request(
 async def update_request(
     session: AsyncSession,
     request_id: int,
-    data: schemas.RequestUpdate
-) -> models.Request:
-    obj = await session.get(models.Request, request_id)
+    data: RequestUpdate
+) -> Request:
+    obj = await session.get(Request, request_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -509,9 +515,9 @@ async def update_request(
 async def patch_request(
     session: AsyncSession,
     request_id: int,
-    data: schemas.RequestPatch
-) -> models.Request:
-    obj = await session.get(models.Request, request_id)
+    data: RequestPatch
+) -> Request:
+    obj = await session.get(Request, request_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Request not found")
 
@@ -519,7 +525,7 @@ async def patch_request(
         obj.user_id = data.user_id
     if data.offer_id is not None:
         # проверяем новый оффер
-        offer = await session.get(models.Offer, data.offer_id)
+        offer = await session.get(Offer, data.offer_id)
         if not offer:
             raise HTTPException(status_code=404, detail="Offer not found")
         obj.offer_id = data.offer_id
@@ -534,7 +540,7 @@ async def patch_request(
 @retry_db
 async def delete_request(session: AsyncSession, request_id: int) -> None:
     result = await session.execute(
-        delete(models.Request).where(models.Request.id == request_id)
+        delete(Request).where(Request.id == request_id)
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -546,8 +552,8 @@ async def delete_request(session: AsyncSession, request_id: int) -> None:
 @retry_db
 async def get_all_reminder_settings(
     session: AsyncSession
-) -> list[models.ReminderSetting]:
-    result = await session.execute(select(models.ReminderSetting))
+) -> list[ReminderSetting]:
+    result = await session.execute(select(ReminderSetting))
     return result.scalars().all()
 
 
@@ -555,8 +561,8 @@ async def get_all_reminder_settings(
 async def get_reminder_setting_by_id(
     session: AsyncSession,
     setting_id: int
-) -> models.ReminderSetting:
-    obj = await session.get(models.ReminderSetting, setting_id)
+) -> ReminderSetting:
+    obj = await session.get(ReminderSetting, setting_id)
     if not obj:
         raise HTTPException(status_code=404, detail="ReminderSetting not found")
     return obj
@@ -565,11 +571,11 @@ async def get_reminder_setting_by_id(
 @retry_db
 async def create_reminder_setting(
     session: AsyncSession,
-    data: schemas.ReminderSettingsCreate
-) -> models.ReminderSetting:
+    data: ReminderSettingsCreate
+) -> ReminderSetting:
     # Проверяем, существует ли уже запись с таким request_id
     existing_reminder = await session.execute(
-        select(models.ReminderSetting).filter(models.ReminderSetting.request_id == data.request_id)
+        select(ReminderSetting).filter(ReminderSetting.request_id == data.request_id)
     )
     existing_reminder = existing_reminder.scalars().first()
 
@@ -578,7 +584,7 @@ async def create_reminder_setting(
         return existing_reminder
     
     # Если записи нет, создаём новую
-    obj = models.ReminderSetting(
+    obj = ReminderSetting(
         request_id=data.request_id,
         first_notification_at=data.first_notification_at,
         frequency_hours=data.frequency_hours,
@@ -593,9 +599,9 @@ async def create_reminder_setting(
 async def update_reminder_setting(
     session: AsyncSession,
     setting_id: int,
-    data: schemas.ReminderSettingsUpdate
-) -> models.ReminderSetting:
-    obj = await session.get(models.ReminderSetting, setting_id)
+    data: ReminderSettingsUpdate
+) -> ReminderSetting:
+    obj = await session.get(ReminderSetting, setting_id)
     if not obj:
         raise HTTPException(status_code=404, detail="ReminderSetting not found")
 
@@ -612,14 +618,14 @@ async def update_reminder_setting(
 async def patch_reminder_setting(
     session: AsyncSession,
     setting_id: int,
-    data: schemas.ReminderSettingsPatch
-) -> models.ReminderSetting:
-    obj = await session.get(models.ReminderSetting, setting_id)
+    data: ReminderSettingsPatch
+) -> ReminderSetting:
+    obj = await session.get(ReminderSetting, setting_id)
     if not obj:
         raise HTTPException(status_code=404, detail="ReminderSetting not found")
 
     if data.request_id is not None:
-        req = await session.get(models.Request, data.request_id)
+        req = await session.get(Request, data.request_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
         obj.request_id = data.request_id
@@ -639,7 +645,7 @@ async def delete_reminder_setting(
     setting_id: int
 ) -> None:
     result = await session.execute(
-        delete(models.ReminderSetting).where(models.ReminderSetting.id == setting_id)
+        delete(ReminderSetting).where(ReminderSetting.id == setting_id)
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="ReminderSetting not found")
@@ -649,8 +655,8 @@ async def delete_reminder_setting(
 # -------------------- NOTIFICATION --------------------
 
 @retry_db
-async def get_all_notifications(session: AsyncSession) -> list[models.Notification]:
-    result = await session.execute(select(models.Notification))
+async def get_all_notifications(session: AsyncSession) -> list[Notification]:
+    result = await session.execute(select(Notification))
     return result.scalars().all()
 
 
@@ -658,8 +664,8 @@ async def get_all_notifications(session: AsyncSession) -> list[models.Notificati
 async def get_notification_by_id(
     session: AsyncSession,
     notification_id: int
-) -> models.Notification:
-    obj = await session.get(models.Notification, notification_id)
+) -> Notification:
+    obj = await session.get(Notification, notification_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Notification not found")
     return obj
@@ -668,14 +674,14 @@ async def get_notification_by_id(
 @retry_db
 async def create_notification(
     session: AsyncSession,
-    data: schemas.NotificationCreate
-) -> models.Notification:
+    data: NotificationCreate
+) -> Notification:
     ts = data.notification_at or datetime.utcnow()
-    req = await session.get(models.Request, data.request_id)
+    req = await session.get(Request, data.request_id)
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    obj = models.Notification(
+    obj = Notification(
         request_id=data.request_id,
         notification_at=ts,
     )
@@ -689,9 +695,9 @@ async def create_notification(
 async def update_notification(
     session: AsyncSession,
     notification_id: int,
-    data: schemas.NotificationUpdate
-) -> models.Notification:
-    obj = await session.get(models.Notification, notification_id)
+    data: NotificationUpdate
+) -> Notification:
+    obj = await session.get(Notification, notification_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Notification not found")
 
@@ -707,14 +713,14 @@ async def update_notification(
 async def patch_notification(
     session: AsyncSession,
     notification_id: int,
-    data: schemas.NotificationPatch
-) -> models.Notification:
-    obj = await session.get(models.Notification, notification_id)
+    data: NotificationPatch
+) -> Notification:
+    obj = await session.get(Notification, notification_id)
     if not obj:
         raise HTTPException(status_code=404, detail="Notification not found")
 
     if data.request_id is not None:
-        req = await session.get(models.Request, data.request_id)
+        req = await session.get(Request, data.request_id)
         if not req:
             raise HTTPException(status_code=404, detail="Request not found")
         obj.request_id = data.request_id
@@ -732,8 +738,48 @@ async def delete_notification(
     notification_id: int
 ) -> None:
     result = await session.execute(
-        delete(models.Notification).where(models.Notification.id == notification_id)
+        delete(Notification).where(Notification.id == notification_id)
     )
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Notification not found")
     await session.commit()
+    
+    
+# -------------------- Announcement --------------------
+
+async def create_scheduled_announcement(session: AsyncSession, data: ScheduledAnnouncementCreate) -> ScheduledAnnouncement:
+    announcement = ScheduledAnnouncement(**data.dict())
+    session.add(announcement)
+    await session.commit()
+    await session.refresh(announcement)
+    return announcement
+
+async def get_scheduled_announcements(session: AsyncSession) -> list[ScheduledAnnouncement]:
+    result = await session.execute(select(ScheduledAnnouncement))
+    return result.scalars().all()
+
+async def get_scheduled_announcement(session: AsyncSession, announcement_id: int) -> ScheduledAnnouncement | None:
+    result = await session.execute(
+        select(ScheduledAnnouncement).where(ScheduledAnnouncement.id == announcement_id)
+    )
+    return result.scalar_one_or_none()
+
+async def update_scheduled_announcement(
+    session: AsyncSession, announcement_id: int, data: ScheduledAnnouncementUpdate
+) -> ScheduledAnnouncement | None:
+    announcement = await get_scheduled_announcement(session, announcement_id)
+    if not announcement:
+        return None
+    for key, value in data.dict(exclude_unset=True).items():
+        setattr(announcement, key, value)
+    await session.commit()
+    await session.refresh(announcement)
+    return announcement
+
+async def delete_scheduled_announcement(session: AsyncSession, announcement_id: int) -> bool:
+    announcement = await get_scheduled_announcement(session, announcement_id)
+    if not announcement:
+        return False
+    await session.delete(announcement)
+    await session.commit()
+    return True

@@ -155,4 +155,16 @@ class Offer(Base):
     tax = Column(Float, nullable=False)        # Налог
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    
+# -------------------- Announcement --------------------
+    
+class ScheduledAnnouncement(Base):
+    __tablename__ = "scheduled_announcements"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255), nullable=False)
+    chat_id = Column(BigInteger, nullable=False)
+    thread_id = Column(Integer, nullable=False)  # message_thread_id
+    last_message_id = Column(Integer, nullable=True)
+    cron = Column(String(255), nullable=False)
 

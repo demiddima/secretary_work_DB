@@ -18,7 +18,7 @@ from src.exceptions import (
 from src.database import init_db
 from src.scheduler import setup_scheduler
 from src.routers import (
-    chats, users, memberships,
+    chats, users, memberships, scheduled_announcements,
     invite_links, algorithm, links, health, 
     requests, reminder_settings, notifications, offers
 )
@@ -76,3 +76,4 @@ app.include_router(requests.router)
 app.include_router(reminder_settings.router)
 app.include_router(notifications.router)
 app.include_router(offers.router)
+app.include_router(scheduled_announcements.router)

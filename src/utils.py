@@ -98,3 +98,13 @@ def reminder_settings_to_dict(reminder_settings):
         "created_at": reminder_settings.created_at,
         "updated_at": reminder_settings.updated_at
     }
+
+def scheduled_announcement_to_dict(announcement):
+    return {
+        "id": announcement.id,
+        "name": announcement.name,
+        "chat_id": announcement.chat_id,
+        "thread_id": announcement.thread_id,
+        "cron": announcement.cron,
+        "last_message_id": announcement.last_message_id
+    }

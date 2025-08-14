@@ -249,3 +249,31 @@ class NotificationPatch(BaseModel):
 
     class Config:
         from_attributes = True
+        
+# -------------------- Announcement --------------------
+
+class ScheduledAnnouncementBase(BaseModel):
+    name: str
+    chat_id: int
+    thread_id: int
+    cron: str
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ScheduledAnnouncementCreate(ScheduledAnnouncementBase):
+    pass
+
+class ScheduledAnnouncementUpdate(BaseModel):
+    name: str | None = None
+    chat_id: int | None = None
+    thread_id: int | None = None
+    cron: str | None = None
+    last_message_id: int | None = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ScheduledAnnouncementRead(ScheduledAnnouncementBase):
+    id: int
+    last_message_id: int | None = None
+
+    model_config = ConfigDict(from_attributes=True)
