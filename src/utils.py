@@ -8,6 +8,13 @@ def model_to_dict(model):
     # Получаем все атрибуты объекта через inspect
     return {column: getattr(model, column) for column in inspect(model).attrs.keys()}
 
+# Безопасное приведение «нулевых» дат MySQL к None
+def _safe_datetime(value):
+    # MySQL иногда возвращает строку '0000-00-00 00:00:00'
+    if value in (None, "", "0000-00-00 00:00:00", "0000-00-00"):
+        return None
+    return value
+
 # Преобразование Chat в словарь
 def chat_to_dict(chat):
     return {
@@ -106,6 +113,6 @@ def scheduled_announcement_to_dict(announcement):
         "chat_id": announcement.chat_id,
         "thread_id": announcement.thread_id,
         "schedule": announcement.schedule,
-        "next_announcements": announcement.next_announcements,
+        "next_announcements": _safe_datetime(getattr(announcement, "next_announcements", None)),
         "last_message_id": announcement.last_message_id
     }
