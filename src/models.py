@@ -166,5 +166,6 @@ class ScheduledAnnouncement(Base):
     chat_id = Column(BigInteger, nullable=False)
     thread_id = Column(Integer, nullable=False)  # message_thread_id
     last_message_id = Column(Integer, nullable=True)
-    cron = Column(String(255), nullable=False)
+    schedule = Column(String(255), nullable=False)
+    next_announcements = Column(DateTime, nullable=True)
 

@@ -22,7 +22,8 @@ async def create_announcement(
     try:
         logger.info(
             f"[POST /scheduled-announcements/] "
-            f"Создание объявления с именем '{data.name}', cron: '{data.cron}', "
+            f"Создание объявления с именем '{data.name}', schedule: '{data.schedule}', "
+            f"next_announcements: '{data.next_announcements}', "
             f"chat_id: {data.chat_id}, thread_id: {data.thread_id}"
         )
         return await crud.create_scheduled_announcement(session, data)

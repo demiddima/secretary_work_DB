@@ -105,6 +105,7 @@ def scheduled_announcement_to_dict(announcement):
         "name": announcement.name,
         "chat_id": announcement.chat_id,
         "thread_id": announcement.thread_id,
-        "cron": announcement.cron,
+        "schedule": announcement.schedule,
+        "next_announcements": announcement.next_announcements,
         "last_message_id": announcement.last_message_id
     }
