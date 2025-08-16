@@ -113,6 +113,5 @@ def scheduled_announcement_to_dict(announcement):
         "chat_id": announcement.chat_id,
         "thread_id": announcement.thread_id,
         "schedule": announcement.schedule,
-        "next_announcements": _safe_datetime(getattr(announcement, "next_announcements", None)),
         "last_message_id": announcement.last_message_id
     }

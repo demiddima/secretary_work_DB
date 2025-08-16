@@ -257,8 +257,6 @@ class ScheduledAnnouncementBase(BaseModel):
     chat_id: int
     thread_id: int
     schedule: str
-    next_announcements: Optional[datetime] = None
-
     model_config = ConfigDict(from_attributes=True)
 
 class ScheduledAnnouncementCreate(ScheduledAnnouncementBase):
@@ -269,7 +267,6 @@ class ScheduledAnnouncementUpdate(BaseModel):
     chat_id: int | None = None
     thread_id: int | None = None
     schedule: str | None = None
-    next_announcements: Optional[datetime] | None = None
     last_message_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

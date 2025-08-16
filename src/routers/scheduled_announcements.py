@@ -22,9 +22,8 @@ async def create_announcement(
     try:
         logger.info(
             f"[POST /scheduled-announcements/] "
-            f"Создание объявления с именем '{data.name}', schedule: '{data.schedule}', "
-            f"next_announcements: '{data.next_announcements}', "
-            f"chat_id: {data.chat_id}, thread_id: {data.thread_id}"
+            f"Создание объявления: name='{data.name}', schedule='{data.schedule}', "
+            f"chat_id={data.chat_id}, thread_id={data.thread_id}"
         )
         return await crud.create_scheduled_announcement(session, data)
     except Exception as e:
@@ -38,7 +37,7 @@ async def read_announcements(
 ):
     try:
         announcements = await crud.get_scheduled_announcements(session)
-        logger.info(f"[GET /scheduled-announcements/] Запрошен список объявлений — всего {len(announcements)} записей")
+        logger.info(f"[GET /scheduled-announcements/] Запрошен список — {len(announcements)} записей")
         return announcements
     except Exception as e:
         logger.error(f"[GET /scheduled-announcements/] Ошибка при получении списка объявлений: {e}")
@@ -55,8 +54,8 @@ async def read_announcement(
         if not result:
             raise HTTPException(status_code=404, detail="Объявление не найдено")
         logger.info(
-            f"[GET /scheduled-announcements/{announcement_id}] Получены данные по объявлению: "
-            f"{scheduled_announcement_to_dict(result)}"
+            f"[GET /scheduled-announcements/{announcement_id}] "
+            f"Данные: {scheduled_announcement_to_dict(result)}"
         )
         return result
     except HTTPException:
@@ -75,7 +74,7 @@ async def update_announcement(
     try:
         logger.info(
             f"[PATCH /scheduled-announcements/{announcement_id}] "
-            f"Запрос на обновление объявления: {data.dict(exclude_none=True)}"
+            f"Обновление: {data.dict(exclude_none=True)}"
         )
         result = await crud.update_scheduled_announcement(session, announcement_id, data)
         if not result:
@@ -97,10 +96,7 @@ async def delete_announcement(
         result = await crud.delete_scheduled_announcement(session, announcement_id)
         if not result:
             raise HTTPException(status_code=404, detail="Объявление не найдено")
-        logger.info(
-            f"[DELETE /scheduled-announcements/{announcement_id}] "
-            f"Объявление успешно удалено"
-        )
+        logger.info(f"[DELETE /scheduled-announcements/{announcement_id}] Объявление удалено")
         return {"ok": True}
     except HTTPException:
         raise

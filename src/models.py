@@ -167,5 +167,4 @@ class ScheduledAnnouncement(Base):
     thread_id = Column(Integer, nullable=False)  # message_thread_id
     last_message_id = Column(Integer, nullable=True)
     schedule = Column(String(255), nullable=False)
-    next_announcements = Column(DateTime, nullable=True)
 

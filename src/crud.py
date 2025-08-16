@@ -754,26 +754,18 @@ async def create_scheduled_announcement(session: AsyncSession, data: ScheduledAn
     await session.refresh(announcement)
     return announcement
 
+
 async def get_scheduled_announcements(session: AsyncSession) -> list[ScheduledAnnouncement]:
     result = await session.execute(select(ScheduledAnnouncement))
-    items = result.scalars().all()
-    # Санитизация 'нулевых' дат MySQL -> None (важно для Pydantic)
-    for it in items:
-        na = getattr(it, "next_announcements", None)
-        if isinstance(na, str) and na.startswith("0000-00-00"):
-            setattr(it, "next_announcements", None)
-    return items
+    return result.scalars().all()
+
 
 async def get_scheduled_announcement(session: AsyncSession, announcement_id: int) -> ScheduledAnnouncement | None:
     result = await session.execute(
         select(ScheduledAnnouncement).where(ScheduledAnnouncement.id == announcement_id)
     )
-    item = result.scalar_one_or_none()
-    if item is not None:
-        na = getattr(item, "next_announcements", None)
-        if isinstance(na, str) and na.startswith("0000-00-00"):
-            setattr(item, "next_announcements", None)
-    return item
+    return result.scalar_one_or_none()
+
 
 async def update_scheduled_announcement(
     session: AsyncSession, announcement_id: int, data: ScheduledAnnouncementUpdate
@@ -786,6 +778,7 @@ async def update_scheduled_announcement(
     await session.commit()
     await session.refresh(announcement)
     return announcement
+
 
 async def delete_scheduled_announcement(session: AsyncSession, announcement_id: int) -> bool:
     announcement = await get_scheduled_announcement(session, announcement_id)
