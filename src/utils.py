@@ -8,13 +8,6 @@ def model_to_dict(model):
     # Получаем все атрибуты объекта через inspect
     return {column: getattr(model, column) for column in inspect(model).attrs.keys()}
 
-# Безопасное приведение «нулевых» дат MySQL к None
-def _safe_datetime(value):
-    # MySQL иногда возвращает строку '0000-00-00 00:00:00'
-    if value in (None, "", "0000-00-00 00:00:00", "0000-00-00"):
-        return None
-    return value
-
 # Преобразование Chat в словарь
 def chat_to_dict(chat):
     return {
@@ -31,33 +24,6 @@ def user_to_dict(user):
         "username": user.username,
         "full_name": user.full_name,
         "terms_accepted": user.terms_accepted
-    }
-
-# Преобразование Offer в словарь
-def offer_to_dict(offer):
-    return {
-        "id": offer.id,
-        "name": offer.name,
-        "total_sum": offer.total_sum,
-        "turnover": offer.turnover,
-        "expense": offer.expense,
-        "payout": offer.payout,
-        "to_you": offer.to_you,
-        "to_ludochat": offer.to_ludochat,
-        "to_manager": offer.to_manager,
-        "tax": offer.tax,
-        "created_at": offer.created_at
-    }
-
-# Преобразование Request в словарь
-def request_to_dict(request):
-    """Преобразует SQLAlchemy объект запроса в словарь"""
-    return {
-        "id": request.id,
-        "user_id": request.user_id,
-        "offer_id": request.offer_id,
-        "is_completed": request.is_completed,
-        "created_at": request.created_at
     }
 
 # Преобразование AlgorithmProgress в словарь
@@ -86,26 +52,8 @@ def link_visit_to_dict(link_visit):
         "link_key": link_visit.link_key
     }
 
-def notification_to_dict(notification):
-    """Преобразует SQLAlchemy объект уведомления в словарь"""
-    return {
-        "id": notification.id,
-        "request_id": notification.request_id,
-        "message": notification.message,
-        "created_at": notification.created_at,
-        "updated_at": notification.updated_at
-    }
 
-def reminder_settings_to_dict(reminder_settings):
-    """Преобразует SQLAlchemy объект настройки напоминания в словарь"""
-    return {
-        "id": reminder_settings.id,
-        "user_id": reminder_settings.user_id,
-        "message": reminder_settings.message,
-        "created_at": reminder_settings.created_at,
-        "updated_at": reminder_settings.updated_at
-    }
-
+# Рекламный
 def scheduled_announcement_to_dict(announcement):
     return {
         "id": announcement.id,
@@ -114,4 +62,17 @@ def scheduled_announcement_to_dict(announcement):
         "thread_id": announcement.thread_id,
         "schedule": announcement.schedule,
         "last_message_id": announcement.last_message_id
+    }
+    
+# --- NEW: утилита для подписок ---
+def user_subscription_to_dict(s):
+    if s is None:
+        return {}
+    return {
+        "user_id": s.user_id,
+        "news_enabled": bool(s.news_enabled),
+        "meetings_enabled": bool(s.meetings_enabled),
+        "important_enabled": bool(s.important_enabled),
+        "created_at": s.created_at,
+        "updated_at": s.updated_at,
     }

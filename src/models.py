@@ -7,6 +7,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from .database import Base
+from sqlalchemy import Boolean, BigInteger, Column, text
+from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime
 
 class Chat(Base):
     __tablename__ = 'chats'
@@ -19,15 +21,16 @@ class Chat(Base):
 class User(Base):
     __tablename__ = 'users'
 
-    id             = Column(BigInteger, primary_key=True)
-    username       = Column(String(255))
-    full_name      = Column(String(255))
+    id = Column(BigInteger, primary_key=True)
+    username = Column(String(255))
+    full_name = Column(String(255))
     terms_accepted = Column(Boolean, nullable=False, default=False)
 
     memberships = relationship(
         "UserMembership",
         backref="user",
         cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     invite_links = relationship(
@@ -39,12 +42,6 @@ class User(Base):
 
     progress = relationship(
         "UserAlgorithmProgress",
-        backref="user",
-        cascade="all, delete-orphan",
-    )
-
-    requests = relationship(
-        "Request",
         backref="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -94,70 +91,8 @@ class Setting(Base):
     value      = Column(String(100), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-# Модели для Узнавайка
+# Рекламные
 
-
-class Request(Base):
-    __tablename__ = 'requests'
-
-    id           = Column(Integer, primary_key=True, autoincrement=True)
-    user_id      = Column(BigInteger, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    offer_id     = Column(Integer, ForeignKey('offers.id', ondelete='CASCADE'), nullable=False)
-    is_completed = Column(Boolean, nullable=False, server_default=sa.text('0'))
-    created_at   = Column(DateTime, server_default=func.now(), nullable=False)
-
-    reminders = relationship(
-        "ReminderSetting",
-        backref="request",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
-    notifications = relationship(
-        "Notification",
-        backref="request",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-
-class ReminderSetting(Base):
-    __tablename__ = 'reminder_settings'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)  # Добавляем поле id
-    request_id = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), nullable=False)
-    first_notification_at = Column(DateTime, nullable=False)
-    frequency_hours = Column(Integer, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-
-
-class Notification(Base):
-    __tablename__ = 'notifications'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)  # Добавляем поле id
-    request_id = Column(Integer, ForeignKey('requests.id', ondelete='CASCADE'), nullable=False)
-    notification_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-
-
-class Offer(Base):
-    __tablename__ = 'offers'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(128), nullable=False)
-    total_sum = Column(Float, nullable=False)  # Общая сумма
-    turnover = Column(Float, nullable=False)   # Оборот (переименовано с income)
-    expense = Column(Float, nullable=False)    # Расход
-
-    payout = Column(Float, nullable=False)     # Выплата
-    to_you = Column(Float, nullable=False)     # Вам
-    to_ludochat = Column(Float, nullable=False)  # Лудочат
-    to_manager = Column(Float, nullable=False)  # Менеджер
-    tax = Column(Float, nullable=False)        # Налог
-
-    created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    
-# -------------------- Announcement --------------------
-    
 class ScheduledAnnouncement(Base):
     __tablename__ = "scheduled_announcements"
 
@@ -167,4 +102,26 @@ class ScheduledAnnouncement(Base):
     thread_id = Column(Integer, nullable=False)  # message_thread_id
     last_message_id = Column(Integer, nullable=True)
     schedule = Column(String(255), nullable=False)
+    
+# Рассылки    
 
+class UserSubscription(Base):
+    __tablename__ = "user_subscriptions"
+
+    user_id = Column(BigInteger, primary_key=True)  # FK → users.id (логически)
+    news_enabled = Column(Boolean, nullable=False, server_default=text("0"))
+    meetings_enabled = Column(Boolean, nullable=False, server_default=text("1"))
+    important_enabled = Column(Boolean, nullable=False, server_default=text("1"))
+
+    # Используем MySQL DATETIME(6) и server defaults с микросекундами
+    created_at = Column(
+        MySQLDateTime(fsp=6),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP(6)"),
+    )
+    updated_at = Column(
+        MySQLDateTime(fsp=6),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP(6)"),
+        # Для ON UPDATE CURRENT_TIMESTAMP(6) лучше применить в миграции через ALTER (см. ниже)
+    )

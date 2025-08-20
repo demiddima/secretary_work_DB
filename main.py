@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from builtins import BaseExceptionGroup
 from sqlalchemy.exc import IntegrityError
 
+
 from src.exceptions import (
     handle_integrity_error,
     handle_global_exception,
@@ -17,10 +18,10 @@ from src.exceptions import (
 )
 from src.database import init_db, engine
 from src.scheduler import setup_scheduler
+from src.routers import subscriptions 
 from src.routers import (
     chats, users, memberships, scheduled_announcements,
     invite_links, algorithm, links, health,
-    requests, reminder_settings, notifications, offers,
 )
 from src.middleware import SuppressRootAccessLogMiddleware
 
@@ -72,8 +73,5 @@ app.include_router(invite_links.router)
 app.include_router(algorithm.router)
 app.include_router(links.router)
 app.include_router(health.router)
-app.include_router(requests.router)
-app.include_router(reminder_settings.router)
-app.include_router(notifications.router)
-app.include_router(offers.router)
 app.include_router(scheduled_announcements.router)
+app.include_router(subscriptions.router)
