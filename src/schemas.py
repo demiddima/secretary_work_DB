@@ -2,8 +2,9 @@
 # commit: обновлены схемы для Request, ReminderSetting, Notification; удалены старые Reminder и Notification
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
-from typing import Optional, Literal
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, Literal, List
+from src.utils import BROADCAST_KINDS, BROADCAST_STATUSES
 
 # Существующие модели (не изменялись)
 
@@ -97,6 +98,12 @@ class ScheduledAnnouncementRead(ScheduledAnnouncementBase):
     
     
 # --- NEW: схемы для подписок ---
+Kind = Literal["news", "meetings", "important"]
+Status = Literal["draft", "scheduled", "sending", "sent", "failed"]
+TargetType = Literal["ids", "sql", "kind"]
+MediaType = Literal["html", "photo", "video", "document", "album"]
+DeliveryStatus = Literal["pending", "sent", "failed", "skipped"]
+
 class UserSubscriptionModel(BaseModel):
     user_id: int
     news_enabled: bool
@@ -117,3 +124,97 @@ class UserSubscriptionUpdate(BaseModel):
 
 class ToggleKind(BaseModel):
     kind: Literal["news", "meetings", "important"]
+    
+    
+class BroadcastBase(BaseModel):
+    kind: Kind = Field(description="Тип рассылки", examples=[BROADCAST_KINDS[0]])
+    title: str = Field(max_length=255, description="Заголовок")
+    content_html: str = Field(description="HTML-содержимое")
+    status: Status = Field(default="draft", description="Статус")
+    scheduled_at: Optional[datetime] = Field(default=None, description="Когда отправлять (UTC)")
+    created_by: Optional[int] = Field(default=None, description="Инициатор (user_id)")
+
+class BroadcastCreate(BroadcastBase):
+    # Для создания достаточно kind, title, content_html; остальное опционально
+    pass
+
+class BroadcastUpdate(BaseModel):
+    kind: Optional[Kind] = None
+    title: Optional[str] = Field(default=None, max_length=255)
+    content_html: Optional[str] = None
+    status: Optional[Status] = None
+    scheduled_at: Optional[datetime] = None
+    created_by: Optional[int] = None
+
+class BroadcastRead(BroadcastBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+    
+class BroadcastTargetBase(BaseModel):
+    type: TargetType
+
+class BroadcastTargetIds(BroadcastTargetBase):
+    type: Literal["ids"]
+    user_ids: List[int] = Field(default_factory=list)
+
+class BroadcastTargetSql(BroadcastTargetBase):
+    type: Literal["sql"]
+    sql: str
+
+class BroadcastTargetKind(BroadcastTargetBase):
+    type: Literal["kind"]
+    kind: Kind
+
+BroadcastTargetCreate = BroadcastTargetIds | BroadcastTargetSql | BroadcastTargetKind
+
+class BroadcastTargetRead(BaseModel):
+    id: int
+    broadcast_id: int
+    type: TargetType
+    user_ids: Optional[List[int]] = None
+    sql: Optional[str] = None
+    kind: Optional[Kind] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# --- BroadcastMedia ---
+class BroadcastMediaItem(BaseModel):
+    type: MediaType
+    payload: dict
+    position: int = 0
+
+class BroadcastMediaPut(BaseModel):
+    items: List[BroadcastMediaItem] = Field(default_factory=list)
+
+class BroadcastMediaReadItem(BroadcastMediaItem):
+    id: int
+    broadcast_id: int
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# --- BroadcastDelivery ---
+class BroadcastDeliveryRead(BaseModel):
+    id: int
+    broadcast_id: int
+    user_id: int
+    status: DeliveryStatus
+    attempts: int
+    error_code: Optional[str]
+    error_message: Optional[str]
+    message_id: Optional[int]
+    sent_at: Optional[datetime]
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Audience preview ---
+class AudiencePreviewRequest(BaseModel):
+    # Любой из трёх таргетов для превью
+    target: BroadcastTargetCreate
+    limit: int = Field(default=10000, ge=1, le=100000)  # safety cap
+
+class AudiencePreviewResponse(BaseModel):
+    total: int
+    sample: List[int] = Field(default_factory=list)  # первые N id

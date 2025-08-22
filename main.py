@@ -21,10 +21,9 @@ from src.scheduler import setup_scheduler
 from src.routers import subscriptions 
 from src.routers import (
     chats, users, memberships, scheduled_announcements,
-    invite_links, algorithm, links, health,
+    invite_links, algorithm, links, health, broadcasts_router, audiences_router
 )
 from src.middleware import SuppressRootAccessLogMiddleware
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,3 +74,6 @@ app.include_router(links.router)
 app.include_router(health.router)
 app.include_router(scheduled_announcements.router)
 app.include_router(subscriptions.router)
+app.include_router(broadcasts_router)
+app.include_router(broadcasts_router)
+app.include_router(audiences_router)
