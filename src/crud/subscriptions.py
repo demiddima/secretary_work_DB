@@ -5,6 +5,7 @@ from .base import (
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy import literal
 from src.models import UserSubscription
+from src.time_msk import now_msk_naive  # ⬅ MSK-naive
 
 DEFAULTS = {
     "news_enabled": False,
@@ -24,16 +25,19 @@ async def get_user_subscriptions(session: AsyncSession, user_id: int) -> UserSub
 async def ensure_user_subscriptions_defaults(session: AsyncSession, user_id: int) -> UserSubscription:
     """
     Создаёт запись с дефолтами, если её нет.
-    Если запись уже есть — ничего не меняет (no-op).
+    Если запись уже есть — "освежает" updated_at.
     """
+    now = now_msk_naive()
     stmt = mysql_insert(UserSubscription).values(
         user_id=user_id,
         news_enabled=DEFAULTS["news_enabled"],
         meetings_enabled=DEFAULTS["meetings_enabled"],
         important_enabled=DEFAULTS["important_enabled"],
+        created_at=now,
+        updated_at=now,
     ).on_duplicate_key_update(
-        # no-op: присваиваем user_id самому себе
-        user_id=UserSubscription.user_id
+        # no-op по флагам, но обновим updated_at
+        updated_at=now,
     )
     await session.execute(stmt)
     await session.commit()
@@ -53,16 +57,21 @@ async def put_user_subscriptions(
 ) -> UserSubscription:
     """
     Upsert (PUT): вставка или полное обновление всех флагов.
+    Всегда проставляем created_at/updated_at в МСК.
     """
+    now = now_msk_naive()
     stmt = mysql_insert(UserSubscription).values(
         user_id=user_id,
         news_enabled=news_enabled,
         meetings_enabled=meetings_enabled,
         important_enabled=important_enabled,
+        created_at=now,
+        updated_at=now,
     ).on_duplicate_key_update(
         news_enabled=literal(news_enabled),
         meetings_enabled=literal(meetings_enabled),
         important_enabled=literal(important_enabled),
+        updated_at=now,
     )
     await session.execute(stmt)
     await session.commit()
@@ -78,7 +87,7 @@ async def update_user_subscriptions(
     **fields,
 ) -> UserSubscription:
     """
-    Patch (частичное обновление полей).
+    Patch (частичное обновление полей) + updated_at (МСК).
     """
     allowed = {k: v for k, v in fields.items() if k in {"news_enabled", "meetings_enabled", "important_enabled"}}
     if not allowed:
@@ -88,6 +97,7 @@ async def update_user_subscriptions(
             raise NoResultFound
         return sub
 
+    allowed["updated_at"] = now_msk_naive()
     await session.execute(
         update(UserSubscription)
         .where(UserSubscription.user_id == user_id)
@@ -121,7 +131,6 @@ async def toggle_user_subscription(session: AsyncSession, user_id: int, kind: st
     if sub is None:
         sub = await ensure_user_subscriptions_defaults(session, user_id)
 
-    # вычисляем новое значение для выбранного флага
     current = {
         "news": bool(sub.news_enabled),
         "meetings": bool(sub.meetings_enabled),
@@ -132,7 +141,7 @@ async def toggle_user_subscription(session: AsyncSession, user_id: int, kind: st
     await session.execute(
         update(UserSubscription)
         .where(UserSubscription.user_id == user_id)
-        .values({f"{kind}_enabled": new_value})
+        .values({f"{kind}_enabled": new_value, "updated_at": now_msk_naive()})
     )
     await session.commit()
 

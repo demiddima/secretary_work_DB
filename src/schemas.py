@@ -1,10 +1,12 @@
 # src/schemas.py
 # commit: обновлены схемы для Request, ReminderSetting, Notification; удалены старые Reminder и Notification
+# + МСК: scheduled_at теперь явно описано как «МСК, naive», и нормализуется в МСК через валидаторы
 
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, Literal, List
 from src.utils import BROADCAST_KINDS, BROADCAST_STATUSES
+from src.time_msk import to_msk_naive  # нормализация в МСК (naive)
 
 # Существующие модели (не изменялись)
 
@@ -95,8 +97,8 @@ class ScheduledAnnouncementRead(ScheduledAnnouncementBase):
     last_message_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
-    
-    
+
+
 # --- NEW: схемы для подписок ---
 Kind = Literal["news", "meetings", "important"]
 Status = Literal["draft", "scheduled", "sending", "sent", "failed"]
@@ -124,15 +126,28 @@ class UserSubscriptionUpdate(BaseModel):
 
 class ToggleKind(BaseModel):
     kind: Literal["news", "meetings", "important"]
-    
-    
+
+
 class BroadcastBase(BaseModel):
     kind: Kind = Field(description="Тип рассылки", examples=[BROADCAST_KINDS[0]])
     title: str = Field(max_length=255, description="Заголовок")
     content_html: str = Field(description="HTML-содержимое")
     status: Status = Field(default="draft", description="Статус")
-    scheduled_at: Optional[datetime] = Field(default=None, description="Когда отправлять (UTC)")
+    # было: (UTC) — теперь МСК-naive
+    scheduled_at: Optional[datetime] = Field(
+        default=None,
+        description="Когда отправлять (МСК, Europe/Moscow). Наивное время без TZ.",
+        examples=["2025-08-23 14:30:00"],
+    )
     created_by: Optional[int] = Field(default=None, description="Инициатор (user_id)")
+
+    # Нормализуем входящее значение в МСК (naive), если оно было с TZ
+    @field_validator("scheduled_at")
+    @classmethod
+    def _normalize_scheduled_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is None:
+            return v
+        return to_msk_naive(v)
 
 class BroadcastCreate(BroadcastBase):
     # Для создания достаточно kind, title, content_html; остальное опционально
@@ -146,13 +161,21 @@ class BroadcastUpdate(BaseModel):
     scheduled_at: Optional[datetime] = None
     created_by: Optional[int] = None
 
+    # Тоже нормализуем scheduled_at при PATCH
+    @field_validator("scheduled_at")
+    @classmethod
+    def _normalize_scheduled_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is None:
+            return v
+        return to_msk_naive(v)
+
 class BroadcastRead(BroadcastBase):
     id: int
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-    
+
 class BroadcastTargetBase(BaseModel):
     type: TargetType
 
