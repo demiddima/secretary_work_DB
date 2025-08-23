@@ -5,7 +5,7 @@ from typing import List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.dependencies import get_session
@@ -54,7 +54,7 @@ def _uniq_keep_order(ids: List[int], limit: int | None = None) -> List[int]:
 async def preview(req: AudiencePreviewRequest, session: AsyncSession = Depends(get_session)):
     """
     Предпросмотр аудитории: sql | ids | kind.
-    На вход логируем тип и лимит; на выход — только итоги.
+    На вход логируем тип и лимит; на выход — total (честный COUNT), sample (ограниченный).
     """
     try:
         target = req.target
@@ -66,16 +66,17 @@ async def preview(req: AudiencePreviewRequest, session: AsyncSession = Depends(g
                 ids = await exec_preview(session, target.sql, limit=limit)
             except AudienceSQLValidationError as e:
                 raise HTTPException(status_code=400, detail=str(e))
-            ids = _uniq_keep_order(ids, limit)
-            resp = AudiencePreviewResponse(total=len(ids), sample=ids[:_SAMPLE_CAP])
+            uniq = _uniq_keep_order(ids, limit)
+            resp = AudiencePreviewResponse(total=len(uniq), sample=uniq[:_SAMPLE_CAP])
             logger.info(
                 f"[POST /audiences/preview] Возвращён предпросмотр (total={resp.total}, sample_len={len(resp.sample)})"
             )
             return resp
 
         if target.type == "ids":
-            uniq_ids = _uniq_keep_order(list(target.user_ids), limit)
-            resp = AudiencePreviewResponse(total=len(uniq_ids), sample=uniq_ids[:_SAMPLE_CAP])
+            # ids считаем без доп. запроса
+            uniq = _uniq_keep_order([int(x) for x in (target.user_ids or [])], limit)
+            resp = AudiencePreviewResponse(total=len(uniq), sample=uniq[:_SAMPLE_CAP])
             logger.info(
                 f"[POST /audiences/preview] Возвращён предпросмотр (total={resp.total}, sample_len={len(resp.sample)})"
             )
@@ -86,13 +87,23 @@ async def preview(req: AudiencePreviewRequest, session: AsyncSession = Depends(g
             if kind not in {"news", "meetings", "important"}:
                 raise HTTPException(status_code=400, detail="Unknown kind")
             flag = f"{kind}_enabled"
-            q = select(UserSubscription.user_id).where(getattr(UserSubscription, flag) == True)  # noqa: E712
-            if limit:
-                q = q.limit(limit)
-            res = await session.execute(q)
-            rows = [int(r[0]) for r in res.fetchall()]
-            uniq_ids = _uniq_keep_order(rows, limit)
-            resp = AudiencePreviewResponse(total=len(uniq_ids), sample=uniq_ids[:_SAMPLE_CAP])
+
+            # 1) total — честный COUNT(*)
+            total_q = select(func.count()).select_from(UserSubscription).where(getattr(UserSubscription, flag) == True)  # noqa: E712
+            total_res = await session.execute(total_q)
+            total = int(total_res.scalar_one() or 0)
+
+            # 2) sample — ограниченная выборка id
+            sample_q = (
+                select(UserSubscription.user_id)
+                .where(getattr(UserSubscription, flag) == True)  # noqa: E712
+                .limit(limit)
+            )
+            sample_res = await session.execute(sample_q)
+            sample_rows = [int(r[0]) for r in sample_res.fetchall()]
+            sample = _uniq_keep_order(sample_rows, limit)[:_SAMPLE_CAP]
+
+            resp = AudiencePreviewResponse(total=total, sample=sample)
             logger.info(
                 f"[POST /audiences/preview] Возвращён предпросмотр (total={resp.total}, sample_len={len(resp.sample)})"
             )

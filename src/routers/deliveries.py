@@ -88,14 +88,11 @@ async def materialize_deliveries(
     broadcast_id: int = Path(..., ge=1),
     session: AsyncSession = Depends(get_session),
 ):
-    """
-    Создаём (идемпотентно) pending-записи в broadcast_deliveries.
-    Источник: явные ids | inline target | сохранённый target.
-    """
     try:
-        limit = _cap(payload.limit, _RESOLVE_CAP)
+        # None → без лимита; иначе кап до _RESOLVE_CAP
+        limit = _cap(payload.limit, _RESOLVE_CAP) if (payload.limit is not None) else None
 
-        # 0) Определяем источник списка user_id
+        # 0) Источник списка user_id
         ids: List[int] = []
         source = "stored"
 
@@ -104,7 +101,7 @@ async def materialize_deliveries(
             source = f"inline_ids({len(payload.ids)})"
 
         elif payload.target:
-            ids = await _resolve_target_full(session, payload.target, limit)
+            ids = await _resolve_target_full(session, payload.target, limit or 10_000_000)
             source = f"inline_target:{payload.target.type}"
 
         else:

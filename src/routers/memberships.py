@@ -1,6 +1,6 @@
 # src/routers/memberships.py
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -75,3 +75,18 @@ async def is_user_in_chat(
             f"user_id={user_id} в чат chat_id={chat_id}: {e}"
         )
         raise HTTPException(status_code=500, detail="Ошибка при проверке подписки пользователя")
+    
+@router.get("/by-chat", response_model=list[dict])
+async def list_by_chat(
+    chat_id: int = Query(..., description="ID чата"),
+    limit: int | None = Query(None, ge=1, description="необязательный лимит"),
+    offset: int | None = Query(None, ge=0, description="смещение"),
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        rows = await crud.list_memberships_by_chat(session, chat_id=chat_id, limit=limit, offset=offset)
+        logger.info(f"[GET /memberships/by-chat] chat_id={chat_id}, limit={limit}, offset={offset}, rows={len(rows)}")
+        return rows
+    except Exception as e:
+        logger.error(f"[GET /memberships/by-chat] Ошибка: chat_id={chat_id}, ошибка={e}")
+        raise HTTPException(status_code=500, detail="Ошибка при получении списка мемберств")

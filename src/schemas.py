@@ -241,21 +241,21 @@ class AudiencePreviewResponse(BaseModel):
 # --- Audience: RESOLVE (новое) ---
 class AudienceResolveRequest(BaseModel):
     target: BroadcastTargetCreate
-    # общий верх: 500k, чтобы исключить «бесконечную» выборку
-    limit: int = Field(default=200_000, ge=1, le=500_000)
+    # None = без лимита
+    limit: Optional[int] = Field(default=None)
 
 class AudienceResolveResponse(BaseModel):
     total: int
     ids: List[int] = Field(default_factory=list)
+    
 # --- Delivery ---
 class DeliveryMaterializeRequest(BaseModel):
-    # Любой из источников:
-    # 1) ids — прямой список
+    # Явный список id…
     ids: Optional[List[int]] = None
-    # 2) target — ids|kind|sql (как в BroadcastTargetCreate)
+    # …или target (ids|kind|sql)
     target: Optional[BroadcastTargetCreate] = None
-    # 3) limit — защитный верх (<= 500k)
-    limit: int = Field(default=200_000, ge=1, le=500_000)
+    # None = без лимита (берём все id)
+    limit: Optional[int] = Field(default=None)
 
 class DeliveryMaterializeResponse(BaseModel):
     total: int = 0      # сколько user_id было в источнике (после uniq/limit)

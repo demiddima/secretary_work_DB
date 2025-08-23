@@ -86,3 +86,20 @@ async def is_user_in_chat(session: AsyncSession, user_id: int, chat_id: int) -> 
     )
     res = await session.execute(stmt)
     return res.scalar_one_or_none() is not None
+
+@retry_db
+async def list_memberships_by_chat(
+    session: AsyncSession,
+    *,
+    chat_id: int,
+    limit: int | None = None,
+    offset: int | None = None,
+) -> list[dict]:
+    q = select(UserMembership.user_id).where(UserMembership.chat_id == chat_id).order_by(UserMembership.user_id)
+    if offset:
+        q = q.offset(int(offset))
+    if limit:
+        q = q.limit(int(limit))
+    res = await session.execute(q)
+    return [{"user_id": int(r[0])} for r in res.fetchall()]
+
