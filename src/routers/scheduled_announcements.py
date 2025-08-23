@@ -1,3 +1,5 @@
+# src/routers/scheduled_announcements.py
+
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,10 +24,12 @@ async def create_announcement(
     try:
         logger.info(
             f"[POST /scheduled-announcements/] "
-            f"Создание объявления: name='{data.name}', schedule='{data.schedule}', "
+            f"Создание объявления (вход): name={data.name!r}, schedule={data.schedule!r}, "
             f"chat_id={data.chat_id}, thread_id={data.thread_id}"
         )
-        return await crud.create_scheduled_announcement(session, data)
+        res = await crud.create_scheduled_announcement(session, data)
+        logger.info("[POST /scheduled-announcements/] Объявление создано")
+        return res
     except Exception as e:
         logger.error(f"[POST /scheduled-announcements/] Ошибка при создании объявления: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при создании объявления")
@@ -37,7 +41,7 @@ async def read_announcements(
 ):
     try:
         announcements = await crud.get_scheduled_announcements(session)
-        logger.info(f"[GET /scheduled-announcements/] Запрошен список — {len(announcements)} записей")
+        logger.info(f"[GET /scheduled-announcements/] Возвращён список объявлений: total={len(announcements)}")
         return announcements
     except Exception as e:
         logger.error(f"[GET /scheduled-announcements/] Ошибка при получении списка объявлений: {e}")
@@ -55,7 +59,7 @@ async def read_announcement(
             raise HTTPException(status_code=404, detail="Объявление не найдено")
         logger.info(
             f"[GET /scheduled-announcements/{announcement_id}] "
-            f"Данные: {scheduled_announcement_to_dict(result)}"
+            f"Возвращены данные объявления: {scheduled_announcement_to_dict(result)}"
         )
         return result
     except HTTPException:
@@ -74,11 +78,12 @@ async def update_announcement(
     try:
         logger.info(
             f"[PATCH /scheduled-announcements/{announcement_id}] "
-            f"Обновление: {data.dict(exclude_none=True)}"
+            f"Обновление объявления (вход): {data.dict(exclude_none=True)}"
         )
         result = await crud.update_scheduled_announcement(session, announcement_id, data)
         if not result:
             raise HTTPException(status_code=404, detail="Объявление не найдено")
+        logger.info(f"[PATCH /scheduled-announcements/{announcement_id}] Объявление обновлено")
         return result
     except HTTPException:
         raise

@@ -21,7 +21,7 @@ from src.scheduler import setup_scheduler
 from src.routers import subscriptions 
 from src.routers import (
     chats, users, memberships, scheduled_announcements,
-    invite_links, algorithm, links, health, broadcasts_router, audiences_router
+    invite_links, algorithm, links, health, broadcasts_router, audiences_router, deliveries as deliveries_router
 )
 from src.middleware import SuppressRootAccessLogMiddleware
 
@@ -77,3 +77,4 @@ app.include_router(subscriptions.router)
 app.include_router(broadcasts_router)
 app.include_router(broadcasts_router)
 app.include_router(audiences_router)
+app.include_router(deliveries_router.router)

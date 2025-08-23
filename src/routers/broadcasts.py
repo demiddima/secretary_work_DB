@@ -1,6 +1,7 @@
 # src/routers/broadcasts.py
 from typing import List, Optional
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,18 +32,38 @@ from src.crud.broadcasts import (
 )
 
 router = APIRouter(prefix="/broadcasts", tags=["broadcasts"])
+logger = logging.getLogger(__name__)
+
 
 @router.post("", response_model=BroadcastRead, status_code=201)
 async def create(payload: BroadcastCreate, session: AsyncSession = Depends(get_session)):
-    obj = await create_broadcast(session, payload)
-    return obj
+    try:
+        logger.info(
+            "[POST /broadcasts] Создание рассылки (вход): "
+            f"title={payload.title!r}, kind={payload.kind!r}, status={payload.status!r}, scheduled_at={payload.scheduled_at}"
+        )
+        obj = await create_broadcast(session, payload)
+        logger.info(f"[{obj.id}] - [POST /broadcasts] Рассылка создана")
+        return obj
+    except Exception as e:
+        logger.error(f"[POST /broadcasts] Ошибка при создании рассылки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при создании рассылки")
+
 
 @router.get("/{broadcast_id}", response_model=BroadcastRead)
 async def get(broadcast_id: int, session: AsyncSession = Depends(get_session)):
-    obj = await get_broadcast(session, broadcast_id)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    return obj
+    try:
+        obj = await get_broadcast(session, broadcast_id)
+        if not obj:
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        logger.info(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}] Возвращены данные рассылки")
+        return obj
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}] Ошибка при получении рассылки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при получении рассылки")
+
 
 @router.get("", response_model=List[BroadcastRead])
 async def list_(
@@ -50,76 +71,150 @@ async def list_(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
 ):
-    return await list_broadcasts(session, limit=limit, offset=offset)
+    try:
+        res = await list_broadcasts(session, limit=limit, offset=offset)
+        logger.info(f"[GET /broadcasts] Возвращён список рассылок: total={len(res)}")
+        return res
+    except Exception as e:
+        logger.error(f"[GET /broadcasts] Ошибка при получении списка рассылок: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при получении списка рассылок")
+
 
 @router.patch("/{broadcast_id}", response_model=BroadcastRead)
 async def patch(broadcast_id: int, patch: BroadcastUpdate, session: AsyncSession = Depends(get_session)):
-    obj = await update_broadcast(session, broadcast_id, patch)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    return obj
+    try:
+        changes = patch.model_dump(exclude_unset=True)
+        logger.info(f"[{broadcast_id}] - [PATCH /broadcasts/{broadcast_id}] Обновление рассылки (вход): {changes}")
+        obj = await update_broadcast(session, broadcast_id, patch)
+        if not obj:
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        logger.info(f"[{broadcast_id}] - [PATCH /broadcasts/{broadcast_id}] Рассылка обновлена")
+        return obj
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [PATCH /broadcasts/{broadcast_id}] Ошибка при обновлении рассылки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при обновлении рассылки")
+
 
 @router.delete("/{broadcast_id}", status_code=204)
 async def delete(broadcast_id: int, session: AsyncSession = Depends(get_session)):
-    ok = await delete_broadcast(session, broadcast_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    return
+    try:
+        ok = await delete_broadcast(session, broadcast_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        logger.info(f"[{broadcast_id}] - [DELETE /broadcasts/{broadcast_id}] Рассылка удалена")
+        return
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [DELETE /broadcasts/{broadcast_id}] Ошибка при удалении рассылки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при удалении рассылки")
+
 
 @router.post("/{broadcast_id}/send_now", response_model=BroadcastRead)
 async def send_now_route(broadcast_id: int, session: AsyncSession = Depends(get_session)):
-    obj = await send_now(session, broadcast_id)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    return obj
+    try:
+        logger.info(f"[{broadcast_id}] - [POST /broadcasts/{broadcast_id}/send_now] Запрос на немедленную отправку")
+        obj = await send_now(session, broadcast_id)
+        if not obj:
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        logger.info(f"[{broadcast_id}] - [POST /broadcasts/{broadcast_id}/send_now] Статус обновлён для немедленной отправки")
+        return obj
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [POST /broadcasts/{broadcast_id}/send_now] Ошибка при переводе в отправку: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при переводе в отправку")
+
 
 @router.get("/{broadcast_id}/target", response_model=BroadcastTargetRead)
 async def read_target(broadcast_id: int, session: AsyncSession = Depends(get_session)):
-    if not await get_broadcast(session, broadcast_id):
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    obj = await get_target(session, broadcast_id)
-    if not obj:
-        raise HTTPException(status_code=404, detail="Target not set")
-    out = {
-        "id": obj.id,
-        "broadcast_id": obj.broadcast_id,
-        "type": obj.type,
-        "user_ids": obj.user_ids_json,
-        "sql": obj.sql_text,
-        "kind": obj.kind,
-        "created_at": obj.created_at,
-    }
-    return out
+    try:
+        if not await get_broadcast(session, broadcast_id):
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        obj = await get_target(session, broadcast_id)
+        if not obj:
+            raise HTTPException(status_code=404, detail="Target not set")
+        out = {
+            "id": obj.id,
+            "broadcast_id": obj.broadcast_id,
+            "type": obj.type,
+            "user_ids": obj.user_ids_json,
+            "sql": obj.sql_text,
+            "kind": obj.kind,
+            "created_at": obj.created_at,
+        }
+        logger.info(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/target] Возвращён таргет рассылки (type={obj.type})")
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/target] Ошибка при получении таргета: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при получении таргета")
+
 
 @router.put("/{broadcast_id}/target", response_model=BroadcastTargetRead, status_code=201)
 async def upsert_target(broadcast_id: int, payload: BroadcastTargetCreate, session: AsyncSession = Depends(get_session)):
-    if not await get_broadcast(session, broadcast_id):
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    obj = await put_target(session, broadcast_id, payload)
-    out = {
-        "id": obj.id,
-        "broadcast_id": obj.broadcast_id,
-        "type": obj.type,
-        "user_ids": obj.user_ids_json,
-        "sql": obj.sql_text,
-        "kind": obj.kind,
-        "created_at": obj.created_at,
-    }
-    return out
+    try:
+        if not await get_broadcast(session, broadcast_id):
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        logger.info(
+            f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/target] "
+            f"Сохранение таргета (вход): type={payload.type}"
+        )
+        obj = await put_target(session, broadcast_id, payload)
+        out = {
+            "id": obj.id,
+            "broadcast_id": obj.broadcast_id,
+            "type": obj.type,
+            "user_ids": obj.user_ids_json,
+            "sql": obj.sql_text,
+            "kind": obj.kind,
+            "created_at": obj.created_at,
+        }
+        logger.info(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/target] Таргет сохранён (type={obj.type})")
+        return out
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/target] Ошибка при сохранении таргета: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при сохранении таргета")
+
 
 @router.get("/{broadcast_id}/media", response_model=List[BroadcastMediaReadItem])
 async def read_media(broadcast_id: int, session: AsyncSession = Depends(get_session)):
-    if not await get_broadcast(session, broadcast_id):
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    items = await get_media(session, broadcast_id)
-    return items
+    try:
+        if not await get_broadcast(session, broadcast_id):
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        items = await get_media(session, broadcast_id)
+        logger.info(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/media] Возвращён список медиа: total={len(items)}")
+        return items
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/media] Ошибка при получении медиа: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при получении медиа")
+
 
 @router.put("/{broadcast_id}/media", response_model=List[BroadcastMediaReadItem], status_code=201)
 async def replace_media(broadcast_id: int, payload: BroadcastMediaPut, session: AsyncSession = Depends(get_session)):
-    if not await get_broadcast(session, broadcast_id):
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    items = await put_media(session, broadcast_id, payload)
-    return items
+    try:
+        if not await get_broadcast(session, broadcast_id):
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        logger.info(
+            f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/media] "
+            f"Замена медиа (вход): items={len(payload.items)}"
+        )
+        items = await put_media(session, broadcast_id, payload)
+        logger.info(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/media] Медиа сохранены: total={len(items)}")
+        return items
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/media] Ошибка при сохранении медиа: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при сохранении медиа")
+
 
 @router.get("/{broadcast_id}/deliveries", response_model=List[BroadcastDeliveryRead])
 async def deliveries(
@@ -129,6 +224,20 @@ async def deliveries(
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_session),
 ):
-    if not await get_broadcast(session, broadcast_id):
-        raise HTTPException(status_code=404, detail="Broadcast not found")
-    return await list_deliveries(session, broadcast_id, status=status, limit=limit, offset=offset)
+    try:
+        if not await get_broadcast(session, broadcast_id):
+            raise HTTPException(status_code=404, detail="Broadcast not found")
+        items = await list_deliveries(session, broadcast_id, status=status, limit=limit, offset=offset)
+        logger.info(
+            f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/deliveries] "
+            f"Возвращён список доставок: total={len(items)}, status={status!r}"
+        )
+        return items
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/deliveries] "
+            f"Ошибка при получении доставок: {e}"
+        )
+        raise HTTPException(status_code=500, detail="Ошибка при получении доставок")

@@ -106,12 +106,12 @@ TargetType = Literal["ids", "sql", "kind"]
 MediaType = Literal["html", "photo", "video", "document", "album"]
 DeliveryStatus = Literal["pending", "sent", "failed", "skipped"]
 
+# --- Подписки ---
 class UserSubscriptionModel(BaseModel):
     user_id: int
     news_enabled: bool
     meetings_enabled: bool
     important_enabled: bool
-
     model_config = ConfigDict(from_attributes=True)
 
 class UserSubscriptionPut(BaseModel):
@@ -128,20 +128,19 @@ class ToggleKind(BaseModel):
     kind: Literal["news", "meetings", "important"]
 
 
+# --- Broadcast (сокращено) ---
 class BroadcastBase(BaseModel):
-    kind: Kind = Field(description="Тип рассылки", examples=[BROADCAST_KINDS[0]])
-    title: str = Field(max_length=255, description="Заголовок")
-    content_html: str = Field(description="HTML-содержимое")
-    status: Status = Field(default="draft", description="Статус")
-    # было: (UTC) — теперь МСК-naive
+    kind: Kind
+    title: str = Field(max_length=255)
+    content_html: str
+    status: Status = Field(default="draft")
     scheduled_at: Optional[datetime] = Field(
         default=None,
         description="Когда отправлять (МСК, Europe/Moscow). Наивное время без TZ.",
         examples=["2025-08-23 14:30:00"],
     )
-    created_by: Optional[int] = Field(default=None, description="Инициатор (user_id)")
+    created_by: Optional[int] = Field(default=None)
 
-    # Нормализуем входящее значение в МСК (naive), если оно было с TZ
     @field_validator("scheduled_at")
     @classmethod
     def _normalize_scheduled_at(cls, v: Optional[datetime]) -> Optional[datetime]:
@@ -150,7 +149,6 @@ class BroadcastBase(BaseModel):
         return to_msk_naive(v)
 
 class BroadcastCreate(BroadcastBase):
-    # Для создания достаточно kind, title, content_html; остальное опционально
     pass
 
 class BroadcastUpdate(BaseModel):
@@ -161,7 +159,6 @@ class BroadcastUpdate(BaseModel):
     scheduled_at: Optional[datetime] = None
     created_by: Optional[int] = None
 
-    # Тоже нормализуем scheduled_at при PATCH
     @field_validator("scheduled_at")
     @classmethod
     def _normalize_scheduled_at(cls, v: Optional[datetime]) -> Optional[datetime]:
@@ -173,9 +170,9 @@ class BroadcastRead(BroadcastBase):
     id: int
     created_at: datetime
     updated_at: datetime
-
     model_config = ConfigDict(from_attributes=True)
 
+# --- Targets ---
 class BroadcastTargetBase(BaseModel):
     type: TargetType
 
@@ -203,7 +200,7 @@ class BroadcastTargetRead(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- BroadcastMedia ---
+# --- Media (сокращено) ---
 class BroadcastMediaItem(BaseModel):
     type: MediaType
     payload: dict
@@ -218,7 +215,7 @@ class BroadcastMediaReadItem(BroadcastMediaItem):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- BroadcastDelivery ---
+# --- Delivery (сокращено) ---
 class BroadcastDeliveryRead(BaseModel):
     id: int
     broadcast_id: int
@@ -232,12 +229,52 @@ class BroadcastDeliveryRead(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- Audience preview ---
+# --- Audience: PREVIEW (как было) ---
 class AudiencePreviewRequest(BaseModel):
-    # Любой из трёх таргетов для превью
     target: BroadcastTargetCreate
-    limit: int = Field(default=10000, ge=1, le=100000)  # safety cap
+    limit: int = Field(default=10000, ge=1, le=100000)
 
 class AudiencePreviewResponse(BaseModel):
     total: int
-    sample: List[int] = Field(default_factory=list)  # первые N id
+    sample: List[int] = Field(default_factory=list)
+
+# --- Audience: RESOLVE (новое) ---
+class AudienceResolveRequest(BaseModel):
+    target: BroadcastTargetCreate
+    # общий верх: 500k, чтобы исключить «бесконечную» выборку
+    limit: int = Field(default=200_000, ge=1, le=500_000)
+
+class AudienceResolveResponse(BaseModel):
+    total: int
+    ids: List[int] = Field(default_factory=list)
+# --- Delivery ---
+class DeliveryMaterializeRequest(BaseModel):
+    # Любой из источников:
+    # 1) ids — прямой список
+    ids: Optional[List[int]] = None
+    # 2) target — ids|kind|sql (как в BroadcastTargetCreate)
+    target: Optional[BroadcastTargetCreate] = None
+    # 3) limit — защитный верх (<= 500k)
+    limit: int = Field(default=200_000, ge=1, le=500_000)
+
+class DeliveryMaterializeResponse(BaseModel):
+    total: int = 0      # сколько user_id было в источнике (после uniq/limit)
+    created: int = 0    # сколько реально вставили
+    existed: int = 0    # сколько уже было
+
+class DeliveryReportItem(BaseModel):
+    user_id: int
+    status: DeliveryStatus
+    message_id: Optional[int] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    sent_at: Optional[datetime] = None
+    attempt_inc: int = Field(default=1, ge=0, le=100)
+
+class DeliveryReportRequest(BaseModel):
+    items: List[DeliveryReportItem] = Field(default_factory=list)
+
+class DeliveryReportResponse(BaseModel):
+    processed: int = 0
+    updated: int = 0
+    inserted: int = 0

@@ -20,10 +20,9 @@ async def upsert_user(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        # Логируем подробности входных данных для создания или обновления пользователя
         logger.info(
             f"[{user_id}] - [PUT /users/{user_id}/upsert] "
-            f"Создать/обновить пользователя с параметрами: "
+            f"Создание/обновление пользователя (вход): "
             f"id={user_id}, username={user.username!r}, full_name={user.full_name!r}, terms_accepted={user.terms_accepted}"
         )
         return await crud.upsert_user(
@@ -46,12 +45,12 @@ async def update_user(
 ):
     try:
         payload = user.dict(exclude_none=True)
-        # Логируем подробности входных данных для обновления пользователя
         logger.info(
             f"[{user_id}] - [PUT /users/{user_id}] "
-            f"Обновление полей пользователя: {payload}"
+            f"Обновление пользователя (вход): {payload}"
         )
         await crud.update_user(session, id=user_id, **payload)
+        logger.info(f"[{user_id}] - [PUT /users/{user_id}] Пользователь обновлён")
         return {"ok": True}
     except HTTPException:
         raise
@@ -70,10 +69,9 @@ async def get_user(
         if not user_obj:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         data = user_to_dict(user_obj)
-        # Логируем подробности выходных данных: сведения о пользователе
         logger.info(
             f"[{user_id}] - [GET /users/{user_id}] "
-            f"Получены данные пользователя: {data}"
+            f"Возвращены данные пользователя: {data}"
         )
         return user_obj
     except HTTPException:
@@ -93,10 +91,9 @@ async def patch_user(
         data = user.dict(exclude_none=True)
         if not data:
             raise HTTPException(status_code=400, detail="Нет полей для обновления")
-        # Логируем подробности входных данных для частичного обновления
         logger.info(
             f"[{user_id}] - [PATCH /users/{user_id}] "
-            f"Частичное обновление полей пользователя: {data}"
+            f"Частичное обновление пользователя (вход): {data}"
         )
         await crud.update_user(session, id=user_id, **data)
     except HTTPException:
@@ -113,11 +110,7 @@ async def delete_user(
 ):
     try:
         await crud.delete_user(session, id=user_id)
-        # Логируем факт успешного удаления пользователя
-        logger.info(
-            f"[{user_id}] - [DELETE /users/{user_id}] "
-            f"Пользователь с id={user_id} успешно удалён"
-        )
+        logger.info(f"[{user_id}] - [DELETE /users/{user_id}] Пользователь удалён")
         return {"ok": True}
     except Exception as e:
         logger.error(f"[{user_id}] - [DELETE /users/{user_id}] Ошибка при удалении пользователя: {e}")

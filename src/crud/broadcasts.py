@@ -1,6 +1,6 @@
 # src/crud/broadcasts.py
-from typing import List, Optional
-from sqlalchemy import select, delete
+from typing import List, Optional, Dict, Any
+from sqlalchemy import select, delete, insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import (
@@ -8,15 +8,93 @@ from src.models import (
     BroadcastTarget,
     BroadcastMedia,
     BroadcastDelivery,
+    UserSubscription,
 )
 from src.schemas import (
     BroadcastCreate,
     BroadcastUpdate,
     BroadcastMediaPut,
     BroadcastTargetCreate,
+    DeliveryMaterializeRequest,
+    DeliveryMaterializeResponse,
+    DeliveryReportRequest,
+    DeliveryReportResponse,
 )
 from src.time_msk import now_msk_naive, to_msk_naive
+from src.audience_sql import exec_preview
 
+
+# ----------------- helpers -----------------
+
+def _cap(n: int, hi: int) -> int:
+    return max(0, min(int(n), int(hi)))
+
+
+def _uniq_keep_order(ids: List[int], limit: int | None = None) -> List[int]:
+    out: List[int] = []
+    seen = set()
+    lim = int(limit) if limit else None
+    for x in ids:
+        try:
+            uid = int(x)
+        except Exception:
+            continue
+        if uid <= 0 or uid in seen:
+            continue
+        seen.add(uid)
+        out.append(uid)
+        if lim is not None and len(out) >= lim:
+            break
+    return out
+
+
+async def _resolve_target_ids(
+    session: AsyncSession,
+    broadcast_id: int,
+    inline_target: Optional[BroadcastTargetCreate],
+    limit: int,
+) -> List[int]:
+    """
+    Резолв аудитории для materialize:
+      - если inline_target есть → используем его,
+      - иначе берём сохранённый BroadcastTarget по broadcast_id.
+    Поддерживаем ids|kind|sql. Возвращаем uniq + keep order до limit.
+    """
+    # 1) взять таргет
+    target: Optional[BroadcastTargetCreate] = inline_target
+    if target is None:
+        res = await session.execute(select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id).limit(1))
+        t: Optional[BroadcastTarget] = res.scalars().first()
+        if not t:
+            return []
+        if t.type == "ids":
+            target = BroadcastTargetCreate(type="ids", user_ids=t.user_ids_json or [])
+        elif t.type == "sql":
+            target = BroadcastTargetCreate(type="sql", sql=t.sql_text or "")
+        else:
+            target = BroadcastTargetCreate(type="kind", kind=t.kind)  # type: ignore
+
+    # 2) развернуть ids
+    if target.type == "ids":
+        return _uniq_keep_order(list(target.user_ids), limit)
+
+    if target.type == "kind":
+        kind = target.kind
+        flag = f"{kind}_enabled"
+        q = select(UserSubscription.user_id).where(getattr(UserSubscription, flag) == True)  # noqa: E712
+        if limit:
+            q = q.limit(limit)
+        rows = (await session.execute(q)).scalars().all()
+        return _uniq_keep_order(list(rows), limit)
+
+    if target.type == "sql":
+        ids = await exec_preview(session, target.sql, limit=limit)
+        return _uniq_keep_order(list(ids), limit)
+
+    return []
+
+
+# ----------------- broadcasts -----------------
 
 async def create_broadcast(session: AsyncSession, payload: BroadcastCreate) -> Broadcast:
     """
@@ -83,7 +161,6 @@ async def delete_broadcast(session: AsyncSession, broadcast_id: int) -> bool:
 async def send_now(session: AsyncSession, broadcast_id: int) -> Optional[Broadcast]:
     """
     Переводит рассылку в статус 'scheduled' и ставит scheduled_at=сейчас (МСК-naive).
-    Никаких func.now()/SQL NOW().
     """
     obj = await session.get(Broadcast, broadcast_id)
     if not obj:
@@ -96,10 +173,10 @@ async def send_now(session: AsyncSession, broadcast_id: int) -> Optional[Broadca
     return obj
 
 
-# --- targets ---
+# ----------------- targets -----------------
+
 async def get_target(session: AsyncSession, broadcast_id: int) -> Optional[BroadcastTarget]:
-    q = select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id)
-    res = await session.execute(q)
+    res = await session.execute(select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id))
     return res.scalars().first()
 
 
@@ -120,7 +197,8 @@ async def put_target(session: AsyncSession, broadcast_id: int, payload: Broadcas
     return obj
 
 
-# --- media ---
+# ----------------- media -----------------
+
 async def get_media(session: AsyncSession, broadcast_id: int) -> List[BroadcastMedia]:
     res = await session.execute(
         select(BroadcastMedia).where(BroadcastMedia.broadcast_id == broadcast_id).order_by(BroadcastMedia.position.asc())
@@ -145,7 +223,8 @@ async def put_media(session: AsyncSession, broadcast_id: int, payload: Broadcast
     return await get_media(session, broadcast_id)
 
 
-# --- deliveries ---
+# ----------------- deliveries (read-only list оставляем как было) -----------------
+
 async def list_deliveries(
     session: AsyncSession,
     broadcast_id: int,
@@ -159,3 +238,154 @@ async def list_deliveries(
     q = q.order_by(BroadcastDelivery.id.asc()).limit(limit).offset(offset)
     res = await session.execute(q)
     return list(res.scalars().all())
+
+
+# ----------------- NEW: deliveries – materialize & report -----------------
+
+_INSERT_CHUNK = 1_000
+_UPDATE_CHUNK = 1_000
+_RESOLVE_CAP = 500_000
+
+
+async def deliveries_materialize(
+    session: AsyncSession,
+    broadcast_id: int,
+    req: DeliveryMaterializeRequest,
+) -> DeliveryMaterializeResponse:
+    """
+    Идемпотентно создаёт pending-записи для заданной аудитории.
+    Источник аудитории: req.ids | req.target | сохранённый BroadcastTarget.
+    """
+    limit = _cap(req.limit, _RESOLVE_CAP)
+
+    # 1) определить список id
+    if req.ids:
+        ids = _uniq_keep_order(list(req.ids), limit)
+    else:
+        ids = await _resolve_target_ids(session, broadcast_id, req.target, limit)
+
+    if not ids:
+        return DeliveryMaterializeResponse(total=0, created=0, existed=0)
+
+    # 2) выяснить, кто уже есть
+    existed: set[int] = set()
+    for i in range(0, len(ids), _INSERT_CHUNK):
+        chunk = ids[i : i + _INSERT_CHUNK]
+        rows = await session.execute(
+            select(BroadcastDelivery.user_id).where(
+                BroadcastDelivery.broadcast_id == broadcast_id,
+                BroadcastDelivery.user_id.in_(chunk),
+            )
+        )
+        existed.update(int(x) for x in rows.scalars().all())
+
+    to_insert = [uid for uid in ids if uid not in existed]
+    created = 0
+
+    # 3) вставить недостающих
+    if to_insert:
+        for i in range(0, len(to_insert), _INSERT_CHUNK):
+            chunk = to_insert[i : i + _INSERT_CHUNK]
+            values = [
+                {
+                    "broadcast_id": broadcast_id,
+                    "user_id": uid,
+                    "status": "pending",
+                    "attempts": 0,
+                }
+                for uid in chunk
+            ]
+            await session.execute(insert(BroadcastDelivery), values)
+            created += len(values)
+
+    await session.commit()
+    return DeliveryMaterializeResponse(total=len(ids), created=created, existed=len(existed))
+
+
+async def deliveries_report(
+    session: AsyncSession,
+    broadcast_id: int,
+    req: DeliveryReportRequest,
+) -> DeliveryReportResponse:
+    """
+    Батч-обновление статусов.
+    Если записи не было — создаём её с указанным статусом и attempts=attempt_inc.
+    """
+    items = req.items or []
+    if not items:
+        return DeliveryReportResponse(processed=0, updated=0, inserted=0)
+
+    # user_id -> item
+    by_uid: Dict[int, Any] = {}
+    for it in items:
+        try:
+            uid = int(it.user_id)
+        except Exception:
+            continue
+        if uid <= 0:
+            continue
+        by_uid[uid] = it
+
+    processed = updated = inserted = 0
+
+    # работаем чанками
+    uids = list(by_uid.keys())
+    for i in range(0, len(uids), _UPDATE_CHUNK):
+        chunk_uids = uids[i : i + _UPDATE_CHUNK]
+
+        # кто уже есть
+        rows = await session.execute(
+            select(BroadcastDelivery.user_id).where(
+                BroadcastDelivery.broadcast_id == broadcast_id,
+                BroadcastDelivery.user_id.in_(chunk_uids),
+            )
+        )
+        existing = set(int(x) for x in rows.scalars().all())
+
+        # обновить существующих
+        for uid in existing:
+            it = by_uid[uid]
+            stmt = (
+                update(BroadcastDelivery)
+                .where(
+                    BroadcastDelivery.broadcast_id == broadcast_id,
+                    BroadcastDelivery.user_id == uid,
+                )
+                .values(
+                    status=it.status,
+                    attempts=BroadcastDelivery.attempts + (it.attempt_inc or 1),
+                    message_id=it.message_id,
+                    error_code=it.error_code,
+                    error_message=it.error_message,
+                    sent_at=it.sent_at,
+                )
+            )
+            await session.execute(stmt)
+            updated += 1
+            processed += 1
+
+        # вставить отсутствующих
+        to_insert = [uid for uid in chunk_uids if uid not in existing]
+        if to_insert:
+            values = []
+            for uid in to_insert:
+                it = by_uid[uid]
+                values.append(
+                    {
+                        "broadcast_id": broadcast_id,
+                        "user_id": uid,
+                        "status": it.status,
+                        "attempts": int(it.attempt_inc or 1),
+                        "message_id": it.message_id,
+                        "error_code": it.error_code,
+                        "error_message": it.error_message,
+                        "sent_at": it.sent_at,
+                        "created_at": now_msk_naive(),
+                    }
+                )
+            await session.execute(insert(BroadcastDelivery), values)
+            inserted += len(values)
+            processed += len(values)
+
+    await session.commit()
+    return DeliveryReportResponse(processed=processed, updated=updated, inserted=inserted)
