@@ -121,17 +121,19 @@ async def preview(req: AudiencePreviewRequest, session: AsyncSession = Depends(g
 @router.post("/resolve", response_model=AudienceResolveResponse)
 async def resolve(req: AudienceResolveRequest, session: AsyncSession = Depends(get_session)):
     """
-    Полный (ограниченный лимитами) список id аудитории для реальной отправки.
-    Логируем только тип/лимит на входе и итоговые количества на выходе.
+    Полный список id аудитории для реальной отправки.
+    Если limit=None — отдаём всех, иначе ограничиваем до _RESOLVE_LIMIT_CAP.
     """
     try:
         target = req.target
-        limit = _cap(req.limit, _RESOLVE_LIMIT_CAP)
-        logger.info(f"[POST /audiences/resolve] Полная материализация аудитории (вход): type={target.type}, limit={limit}")
+        limit = _cap(req.limit, _RESOLVE_LIMIT_CAP) if (req.limit is not None) else None
+        logger.info(
+            f"[POST /audiences/resolve] Полная материализация аудитории (вход): type={target.type}, limit={limit}"
+        )
 
         if target.type == "sql":
             try:
-                ids = await exec_preview(session, target.sql, limit=limit)
+                ids = await exec_preview(session, target.sql, limit=limit or _RESOLVE_LIMIT_CAP)
             except AudienceSQLValidationError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             ids = _uniq_keep_order(ids, limit)
@@ -140,7 +142,7 @@ async def resolve(req: AudienceResolveRequest, session: AsyncSession = Depends(g
             return resp
 
         if target.type == "ids":
-            uniq_ids = _uniq_keep_order(list(target.user_ids), limit)
+            uniq_ids = _uniq_keep_order([int(x) for x in target.user_ids if x is not None], limit)
             resp = AudienceResolveResponse(total=len(uniq_ids), ids=uniq_ids)
             logger.info(f"[POST /audiences/resolve] Возвращён список id (total={resp.total})")
             return resp
@@ -149,12 +151,16 @@ async def resolve(req: AudienceResolveRequest, session: AsyncSession = Depends(g
             kind = target.kind
             if kind not in {"news", "meetings", "important"}:
                 raise HTTPException(status_code=400, detail="Unknown kind")
+
             flag = f"{kind}_enabled"
             q = select(UserSubscription.user_id).where(getattr(UserSubscription, flag) == True)  # noqa: E712
             if limit:
                 q = q.limit(limit)
             res = await session.execute(q)
-            rows = [int(r[0]) for r in res.fetchall()]
+
+            # фильтруем None, чтобы не падало на int(None)
+            rows = [int(r[0]) for r in res.fetchall() if r[0] is not None]
+
             uniq_ids = _uniq_keep_order(rows, limit)
             resp = AudienceResolveResponse(total=len(uniq_ids), ids=uniq_ids)
             logger.info(f"[POST /audiences/resolve] Возвращён список id (total={resp.total})")
