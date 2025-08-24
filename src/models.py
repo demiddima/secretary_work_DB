@@ -5,7 +5,7 @@ from sqlalchemy import (
     UniqueConstraint, Integer, Text, Enum, Index, text, JSON
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.ext.hybrid import hybrid_property
+# from sqlalchemy.ext.hybrid import hybrid_property  # не используется
 from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime
 
 from src.utils import BROADCAST_KINDS, BROADCAST_STATUSES
@@ -47,6 +47,14 @@ class User(Base):
 
     progress = relationship(
         "UserAlgorithmProgress",
+        backref="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    # NEW: связь с подписками; passive_deletes=True, чтобы уважать ON DELETE CASCADE в БД
+    subscriptions = relationship(
+        "UserSubscription",
         backref="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -125,7 +133,12 @@ class ScheduledAnnouncement(Base):
 class UserSubscription(Base):
     __tablename__ = "user_subscriptions"
 
-    user_id = Column(BigInteger, primary_key=True)  # FK → users.id (логически)
+    # NEW: реальный FK с каскадом при удалении пользователя
+    user_id = Column(
+        BigInteger,
+        ForeignKey('users.id', ondelete='CASCADE'),
+        primary_key=True,
+    )
     news_enabled = Column(Boolean, nullable=False, server_default=text("0"))
     meetings_enabled = Column(Boolean, nullable=False, server_default=text("1"))
     important_enabled = Column(Boolean, nullable=False, server_default=text("1"))
@@ -142,7 +155,7 @@ class Broadcast(Base):
 
     kind = Column(Enum(*BROADCAST_KINDS, name="broadcast_kind"), nullable=False)
     title = Column(String(255), nullable=False)
-    content_html = Column(Text, nullable=False)
+    content = sa.Column(sa.JSON, nullable=False)
 
     status = Column(
         Enum(*BROADCAST_STATUSES, name="broadcast_status"),
@@ -172,32 +185,6 @@ class BroadcastTarget(Base):
     broadcast = relationship("Broadcast", backref="targets")
 
 
-class BroadcastMedia(Base):
-    __tablename__ = "broadcast_media"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    broadcast_id = Column(
-        Integer,
-        ForeignKey("broadcasts.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    type = Column(
-        Enum("html", "photo", "video", "document", "album", name="broadcast_media_type"),
-        nullable=False,
-    )
-    payload_json = Column(JSON, nullable=False)
-    position = Column(SmallInteger, nullable=False, server_default="0")
-    # было: server_default=func.now()
-    created_at = Column(DateTime(timezone=False), nullable=False, default=now_msk_naive)
-
-    broadcast = relationship("Broadcast", backref="media_items")
-
-    # ✅ alias для Pydantic-схем
-    @hybrid_property
-    def payload(self):
-        return self.payload_json
-
-
 class BroadcastDelivery(Base):
     __tablename__ = "broadcast_deliveries"
 
@@ -221,7 +208,9 @@ class BroadcastDelivery(Base):
 Index("ix_broadcasts_status", Broadcast.status)
 Index("ix_broadcasts_scheduled_at", Broadcast.scheduled_at)
 Index("ix_btarget_broadcast_id", BroadcastTarget.broadcast_id)
-Index("ix_bmedia_broadcast_id", BroadcastMedia.broadcast_id)
 Index("ix_bdeliveries_broadcast_id", BroadcastDelivery.broadcast_id)
-Index("ix_bdeliveries_broadcast_status", BroadcastDelivery.broadcast_id, BroadcastDelivery.status,
-      mysql_length={"status": 10})
+Index(
+    "ix_bdeliveries_broadcast_status",
+    BroadcastDelivery.broadcast_id, BroadcastDelivery.status,
+    mysql_length={"status": 10}
+)

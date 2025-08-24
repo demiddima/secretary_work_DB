@@ -6,14 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import (
     Broadcast,
     BroadcastTarget,
-    BroadcastMedia,
     BroadcastDelivery,
     UserSubscription,
 )
 from src.schemas import (
     BroadcastCreate,
     BroadcastUpdate,
-    BroadcastMediaPut,
     BroadcastTargetCreate,
     DeliveryMaterializeRequest,
     DeliveryMaterializeResponse,
@@ -99,12 +97,14 @@ async def _resolve_target_ids(
 async def create_broadcast(session: AsyncSession, payload: BroadcastCreate) -> Broadcast:
     """
     Создание рассылки.
+    Храним content как JSON (dict) вида {"text": "<html>", "files": "id1,id2"}.
     Все таймстемпы выставляются приложением в МСК (naive).
     """
+    content_dict: Dict[str, Any] = payload.content.model_dump() if hasattr(payload.content, "model_dump") else dict(payload.content)  # type: ignore
     obj = Broadcast(
         kind=payload.kind,
         title=payload.title,
-        content_html=payload.content_html,
+        content=content_dict,
         status=payload.status,
         scheduled_at=to_msk_naive(payload.scheduled_at) if payload.scheduled_at else None,
         created_by=payload.created_by,
@@ -139,6 +139,17 @@ async def update_broadcast(session: AsyncSession, broadcast_id: int, patch: Broa
     data = patch.model_dump(exclude_unset=True)
     if "scheduled_at" in data and data["scheduled_at"] is not None:
         data["scheduled_at"] = to_msk_naive(data["scheduled_at"])
+
+    # content из pydantic-модели → dict
+    if "content" in data and data["content"] is not None:
+        content_val = data["content"]
+        if hasattr(content_val, "model_dump"):
+            data["content"] = content_val.model_dump()
+        elif isinstance(content_val, dict):
+            data["content"] = content_val
+        else:
+            # на всякий случай
+            data["content"] = dict(content_val)
 
     for k, v in data.items():
         setattr(obj, k, v)
@@ -197,33 +208,7 @@ async def put_target(session: AsyncSession, broadcast_id: int, payload: Broadcas
     return obj
 
 
-# ----------------- media -----------------
-
-async def get_media(session: AsyncSession, broadcast_id: int) -> List[BroadcastMedia]:
-    res = await session.execute(
-        select(BroadcastMedia).where(BroadcastMedia.broadcast_id == broadcast_id).order_by(BroadcastMedia.position.asc())
-    )
-    return list(res.scalars().all())
-
-
-async def put_media(session: AsyncSession, broadcast_id: int, payload: BroadcastMediaPut) -> List[BroadcastMedia]:
-    await session.execute(delete(BroadcastMedia).where(BroadcastMedia.broadcast_id == broadcast_id))
-    objects: List[BroadcastMedia] = []
-    for it in payload.items:
-        obj = BroadcastMedia(
-            broadcast_id=broadcast_id,
-            type=it.type,
-            payload_json=it.payload,
-            position=it.position or 0,
-        )
-        objects.append(obj)
-    for obj in objects:
-        session.add(obj)
-    await session.commit()
-    return await get_media(session, broadcast_id)
-
-
-# ----------------- deliveries (read-only list оставляем как было) -----------------
+# ----------------- deliveries (read-only list) -----------------
 
 async def list_deliveries(
     session: AsyncSession,
@@ -240,7 +225,8 @@ async def list_deliveries(
     return list(res.scalars().all())
 
 
-# ----------------- NEW: deliveries – materialize & report -----------------
+# ----------------- NEW (optional): deliveries – materialize & report -----------------
+# Оставлено для совместимости; маршруты используют собственные реализации в routers/deliveries.py
 
 _INSERT_CHUNK = 1_000
 _UPDATE_CHUNK = 1_000
@@ -252,13 +238,7 @@ async def deliveries_materialize(
     broadcast_id: int,
     req: DeliveryMaterializeRequest,
 ) -> DeliveryMaterializeResponse:
-    """
-    Идемпотентно создаёт pending-записи для заданной аудитории.
-    Источник аудитории: req.ids | req.target | сохранённый BroadcastTarget.
-    """
     limit = _cap(req.limit, _RESOLVE_CAP)
-
-    # 1) определить список id
     if req.ids:
         ids = _uniq_keep_order(list(req.ids), limit)
     else:
@@ -267,7 +247,6 @@ async def deliveries_materialize(
     if not ids:
         return DeliveryMaterializeResponse(total=0, created=0, existed=0)
 
-    # 2) выяснить, кто уже есть
     existed: set[int] = set()
     for i in range(0, len(ids), _INSERT_CHUNK):
         chunk = ids[i : i + _INSERT_CHUNK]
@@ -282,7 +261,6 @@ async def deliveries_materialize(
     to_insert = [uid for uid in ids if uid not in existed]
     created = 0
 
-    # 3) вставить недостающих
     if to_insert:
         for i in range(0, len(to_insert), _INSERT_CHUNK):
             chunk = to_insert[i : i + _INSERT_CHUNK]
@@ -307,15 +285,10 @@ async def deliveries_report(
     broadcast_id: int,
     req: DeliveryReportRequest,
 ) -> DeliveryReportResponse:
-    """
-    Батч-обновление статусов.
-    Если записи не было — создаём её с указанным статусом и attempts=attempt_inc.
-    """
     items = req.items or []
     if not items:
         return DeliveryReportResponse(processed=0, updated=0, inserted=0)
 
-    # user_id -> item
     by_uid: Dict[int, Any] = {}
     for it in items:
         try:
@@ -328,12 +301,10 @@ async def deliveries_report(
 
     processed = updated = inserted = 0
 
-    # работаем чанками
     uids = list(by_uid.keys())
     for i in range(0, len(uids), _UPDATE_CHUNK):
         chunk_uids = uids[i : i + _UPDATE_CHUNK]
 
-        # кто уже есть
         rows = await session.execute(
             select(BroadcastDelivery.user_id).where(
                 BroadcastDelivery.broadcast_id == broadcast_id,
@@ -342,7 +313,6 @@ async def deliveries_report(
         )
         existing = set(int(x) for x in rows.scalars().all())
 
-        # обновить существующих
         for uid in existing:
             it = by_uid[uid]
             stmt = (
@@ -364,7 +334,6 @@ async def deliveries_report(
             updated += 1
             processed += 1
 
-        # вставить отсутствующих
         to_insert = [uid for uid in chunk_uids if uid not in existing]
         if to_insert:
             values = []

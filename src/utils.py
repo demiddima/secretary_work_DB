@@ -78,7 +78,7 @@ def broadcast_to_dict(b):
         "id": b.id,
         "kind": b.kind,
         "title": b.title,
-        "content_html": b.content_html,
+        "content": b.content,
         "status": b.status,
         "scheduled_at": b.scheduled_at,
         "created_by": b.created_by,

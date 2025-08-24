@@ -13,8 +13,6 @@ from src.schemas import (
     BroadcastRead,
     BroadcastTargetCreate,
     BroadcastTargetRead,
-    BroadcastMediaPut,
-    BroadcastMediaReadItem,
     BroadcastDeliveryRead,
 )
 from src.crud.broadcasts import (
@@ -26,8 +24,6 @@ from src.crud.broadcasts import (
     send_now,
     get_target,
     put_target,
-    get_media,
-    put_media,
     list_deliveries,
 )
 
@@ -180,40 +176,6 @@ async def upsert_target(broadcast_id: int, payload: BroadcastTargetCreate, sessi
     except Exception as e:
         logger.error(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/target] Ошибка при сохранении таргета: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при сохранении таргета")
-
-
-@router.get("/{broadcast_id}/media", response_model=List[BroadcastMediaReadItem])
-async def read_media(broadcast_id: int, session: AsyncSession = Depends(get_session)):
-    try:
-        if not await get_broadcast(session, broadcast_id):
-            raise HTTPException(status_code=404, detail="Broadcast not found")
-        items = await get_media(session, broadcast_id)
-        logger.info(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/media] Возвращён список медиа: total={len(items)}")
-        return items
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[{broadcast_id}] - [GET /broadcasts/{broadcast_id}/media] Ошибка при получении медиа: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка при получении медиа")
-
-
-@router.put("/{broadcast_id}/media", response_model=List[BroadcastMediaReadItem], status_code=201)
-async def replace_media(broadcast_id: int, payload: BroadcastMediaPut, session: AsyncSession = Depends(get_session)):
-    try:
-        if not await get_broadcast(session, broadcast_id):
-            raise HTTPException(status_code=404, detail="Broadcast not found")
-        logger.info(
-            f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/media] "
-            f"Замена медиа (вход): items={len(payload.items)}"
-        )
-        items = await put_media(session, broadcast_id, payload)
-        logger.info(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/media] Медиа сохранены: total={len(items)}")
-        return items
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[{broadcast_id}] - [PUT /broadcasts/{broadcast_id}/media] Ошибка при сохранении медиа: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка при сохранении медиа")
 
 
 @router.get("/{broadcast_id}/deliveries", response_model=List[BroadcastDeliveryRead])

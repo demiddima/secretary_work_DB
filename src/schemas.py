@@ -103,7 +103,6 @@ class ScheduledAnnouncementRead(ScheduledAnnouncementBase):
 Kind = Literal["news", "meetings", "important"]
 Status = Literal["draft", "scheduled", "sending", "sent", "failed"]
 TargetType = Literal["ids", "sql", "kind"]
-MediaType = Literal["html", "photo", "video", "document", "album"]
 DeliveryStatus = Literal["pending", "sent", "failed", "skipped"]
 
 # --- Подписки ---
@@ -125,14 +124,39 @@ class UserSubscriptionUpdate(BaseModel):
     important_enabled: Optional[bool] = None
 
 class ToggleKind(BaseModel):
-    kind: Literal["news", "meetings", "important"]
+    kind: Kind
+
+
+# --- Broadcast content (JSON) ---
+class BroadcastContent(BaseModel):
+    """
+    Храним единый JSON:
+      {
+        "text": "<HTML-разметка>",
+        "files": "file_id1,file_id2"   # через запятую
+      }
+    """
+    text: str = Field(default="")
+    files: str = Field(default="")
+
+    @field_validator("text")
+    @classmethod
+    def _normalize_text(cls, v: str) -> str:
+        # Пусть всегда строка; дальше парсится как HTML на стороне отправки
+        return v or ""
+
+    @field_validator("files")
+    @classmethod
+    def _normalize_files(cls, v: str) -> str:
+        # Пустая строка, если None; пробелы подрежем
+        return (v or "").strip()
 
 
 # --- Broadcast (сокращено) ---
 class BroadcastBase(BaseModel):
     kind: Kind
     title: str = Field(max_length=255)
-    content_html: str
+    content: BroadcastContent
     status: Status = Field(default="draft")
     scheduled_at: Optional[datetime] = Field(
         default=None,
@@ -154,7 +178,7 @@ class BroadcastCreate(BroadcastBase):
 class BroadcastUpdate(BaseModel):
     kind: Optional[Kind] = None
     title: Optional[str] = Field(default=None, max_length=255)
-    content_html: Optional[str] = None
+    content: Optional[BroadcastContent] = None
     status: Optional[Status] = None
     scheduled_at: Optional[datetime] = None
     created_by: Optional[int] = None
@@ -171,6 +195,7 @@ class BroadcastRead(BroadcastBase):
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
 
 # --- Targets ---
 class BroadcastTargetBase(BaseModel):
@@ -200,20 +225,6 @@ class BroadcastTargetRead(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- Media (сокращено) ---
-class BroadcastMediaItem(BaseModel):
-    type: MediaType
-    payload: dict
-    position: int = 0
-
-class BroadcastMediaPut(BaseModel):
-    items: List[BroadcastMediaItem] = Field(default_factory=list)
-
-class BroadcastMediaReadItem(BroadcastMediaItem):
-    id: int
-    broadcast_id: int
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
 
 # --- Delivery (сокращено) ---
 class BroadcastDeliveryRead(BaseModel):
@@ -229,7 +240,8 @@ class BroadcastDeliveryRead(BaseModel):
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
-# --- Audience: PREVIEW (как было) ---
+
+# --- Audience: PREVIEW ---
 class AudiencePreviewRequest(BaseModel):
     target: BroadcastTargetCreate
     limit: int = Field(default=10000, ge=1, le=100000)
@@ -238,7 +250,8 @@ class AudiencePreviewResponse(BaseModel):
     total: int
     sample: List[int] = Field(default_factory=list)
 
-# --- Audience: RESOLVE (новое) ---
+
+# --- Audience: RESOLVE ---
 class AudienceResolveRequest(BaseModel):
     target: BroadcastTargetCreate
     # None = без лимита
@@ -247,8 +260,9 @@ class AudienceResolveRequest(BaseModel):
 class AudienceResolveResponse(BaseModel):
     total: int
     ids: List[int] = Field(default_factory=list)
-    
-# --- Delivery ---
+
+
+# --- Delivery materialize/report ---
 class DeliveryMaterializeRequest(BaseModel):
     # Явный список id…
     ids: Optional[List[int]] = None
