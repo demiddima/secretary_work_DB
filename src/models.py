@@ -163,6 +163,11 @@ class Broadcast(Base):
         server_default="draft",
     )
     scheduled_at = Column(DateTime(timezone=False), nullable=True)
+
+    # NEW: расписание и флаг активности
+    schedule = Column(String(255), nullable=True)
+    enabled = Column(Boolean, nullable=False, server_default=text("1"))
+
     created_by = Column(BigInteger, nullable=True)
 
     # было: server_default=func.now(), onupdate=func.now()

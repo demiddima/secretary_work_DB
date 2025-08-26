@@ -163,6 +163,14 @@ class BroadcastBase(BaseModel):
         description="Когда отправлять (МСК, Europe/Moscow). Наивное время без TZ.",
         examples=["2025-08-23 14:30:00"],
     )
+    # NEW: поля расписания и флага активности
+    schedule: Optional[str] = Field(
+        default=None,
+        description="Строка расписания как в scheduled_announcements (cron или 'DD.MM.YYYY,period_days,HH:MM').",
+        examples=["0 12 * * 1", "27.08.2025,3,15:00"],
+    )
+    enabled: bool = Field(default=True, description="Флаг активности повторяющейся рассылки.")
+
     created_by: Optional[int] = Field(default=None)
 
     @field_validator("scheduled_at")
@@ -181,6 +189,8 @@ class BroadcastUpdate(BaseModel):
     content: Optional[BroadcastContent] = None
     status: Optional[Status] = None
     scheduled_at: Optional[datetime] = None
+    schedule: Optional[str] = None        # NEW
+    enabled: Optional[bool] = None        # NEW
     created_by: Optional[int] = None
 
     @field_validator("scheduled_at")

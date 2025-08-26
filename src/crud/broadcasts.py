@@ -1,6 +1,8 @@
 # src/crud/broadcasts.py
+from __future__ import annotations
+
 from typing import List, Optional, Dict, Any
-from sqlalchemy import select, delete, insert, update
+from sqlalchemy import select, delete, insert, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models import (
@@ -13,6 +15,9 @@ from src.schemas import (
     BroadcastCreate,
     BroadcastUpdate,
     BroadcastTargetCreate,
+    BroadcastTargetIds,
+    BroadcastTargetSql,
+    BroadcastTargetKind,
     DeliveryMaterializeRequest,
     DeliveryMaterializeResponse,
     DeliveryReportRequest,
@@ -20,15 +25,26 @@ from src.schemas import (
 )
 from src.time_msk import now_msk_naive, to_msk_naive
 from src.audience_sql import exec_preview
+from src.utils import BROADCAST_KINDS
 
 
 # ----------------- helpers -----------------
 
-def _cap(n: int, hi: int) -> int:
-    return max(0, min(int(n), int(hi)))
+_RESOLVE_CAP = 500_000
+_INSERT_CHUNK = 1_000
+_UPDATE_CHUNK = 1_000
 
 
-def _uniq_keep_order(ids: List[int], limit: int | None = None) -> List[int]:
+def _cap(n: Optional[int], hi: int) -> int:
+    if n is None:
+        return hi
+    try:
+        return max(0, min(int(n), int(hi)))
+    except Exception:
+        return hi
+
+
+def _uniq_keep_order(ids: List[int], limit: Optional[int] = None) -> List[int]:
     out: List[int] = []
     seen = set()
     lim = int(limit) if limit else None
@@ -46,48 +62,51 @@ def _uniq_keep_order(ids: List[int], limit: int | None = None) -> List[int]:
     return out
 
 
+async def _load_saved_target(session: AsyncSession, broadcast_id: int) -> Optional[BroadcastTargetCreate]:
+    res = await session.execute(
+        select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id).limit(1)
+    )
+    t: Optional[BroadcastTarget] = res.scalars().first()
+    if not t:
+        return None
+    if t.type == "ids":
+        return BroadcastTargetIds(type="ids", user_ids=t.user_ids_json or [])
+    if t.type == "sql":
+        return BroadcastTargetSql(type="sql", sql=t.sql_text or "")
+    if t.type == "kind":
+        return BroadcastTargetKind(type="kind", kind=t.kind)
+    return None
+
+
 async def _resolve_target_ids(
     session: AsyncSession,
-    broadcast_id: int,
-    inline_target: Optional[BroadcastTargetCreate],
-    limit: int,
+    target: BroadcastTargetCreate,
+    *,
+    limit: Optional[int],
 ) -> List[int]:
     """
-    Резолв аудитории для materialize:
-      - если inline_target есть → используем его,
-      - иначе берём сохранённый BroadcastTarget по broadcast_id.
     Поддерживаем ids|kind|sql. Возвращаем uniq + keep order до limit.
     """
-    # 1) взять таргет
-    target: Optional[BroadcastTargetCreate] = inline_target
-    if target is None:
-        res = await session.execute(select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id).limit(1))
-        t: Optional[BroadcastTarget] = res.scalars().first()
-        if not t:
-            return []
-        if t.type == "ids":
-            target = BroadcastTargetCreate(type="ids", user_ids=t.user_ids_json or [])
-        elif t.type == "sql":
-            target = BroadcastTargetCreate(type="sql", sql=t.sql_text or "")
-        else:
-            target = BroadcastTargetCreate(type="kind", kind=t.kind)  # type: ignore
-
-    # 2) развернуть ids
     if target.type == "ids":
         return _uniq_keep_order(list(target.user_ids), limit)
 
     if target.type == "kind":
-        kind = target.kind
-        flag = f"{kind}_enabled"
-        q = select(UserSubscription.user_id).where(getattr(UserSubscription, flag) == True)  # noqa: E712
+        if target.kind not in BROADCAST_KINDS:
+            raise ValueError(f"Unknown kind: {target.kind}")
+        flag_col = {
+            "news": UserSubscription.news_enabled,
+            "meetings": UserSubscription.meetings_enabled,
+            "important": UserSubscription.important_enabled,
+        }[target.kind]
+        q = select(UserSubscription.user_id).where(flag_col.is_(True))  # noqa: E712
         if limit:
             q = q.limit(limit)
         rows = (await session.execute(q)).scalars().all()
-        return _uniq_keep_order(list(rows), limit)
+        return _uniq_keep_order([int(x) for x in rows], limit)
 
     if target.type == "sql":
-        ids = await exec_preview(session, target.sql, limit=limit)
-        return _uniq_keep_order(list(ids), limit)
+        ids = await exec_preview(session, target.sql, limit=limit or _RESOLVE_CAP)
+        return _uniq_keep_order([int(x) for x in ids], limit)
 
     return []
 
@@ -97,16 +116,25 @@ async def _resolve_target_ids(
 async def create_broadcast(session: AsyncSession, payload: BroadcastCreate) -> Broadcast:
     """
     Создание рассылки.
-    Храним content как JSON (dict) вида {"text": "<html>", "files": "id1,id2"}.
+    content — JSON (dict) вида {"text": "<html>", "files": "id1,id2"}.
     Все таймстемпы выставляются приложением в МСК (naive).
+    NEW: сохраняем schedule и enabled.
     """
-    content_dict: Dict[str, Any] = payload.content.model_dump() if hasattr(payload.content, "model_dump") else dict(payload.content)  # type: ignore
+    content_dict: Dict[str, Any] = (
+        payload.content.model_dump()
+        if hasattr(payload.content, "model_dump")
+        else dict(payload.content)  # type: ignore[arg-type]
+    )
+
     obj = Broadcast(
         kind=payload.kind,
         title=payload.title,
         content=content_dict,
         status=payload.status,
         scheduled_at=to_msk_naive(payload.scheduled_at) if payload.scheduled_at else None,
+        # NEW:
+        schedule=payload.schedule,
+        enabled=bool(payload.enabled),
         created_by=payload.created_by,
         created_at=now_msk_naive(),
         updated_at=now_msk_naive(),
@@ -121,9 +149,24 @@ async def get_broadcast(session: AsyncSession, broadcast_id: int) -> Optional[Br
     return await session.get(Broadcast, broadcast_id)
 
 
-async def list_broadcasts(session: AsyncSession, limit: int = 100, offset: int = 0) -> List[Broadcast]:
-    q = select(Broadcast).order_by(Broadcast.id.desc()).limit(limit).offset(offset)
-    res = await session.execute(q)
+async def list_broadcasts(
+    session: AsyncSession,
+    *,
+    status: Optional[str] = None,
+    enabled: Optional[bool] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> List[Broadcast]:
+    """
+    Возвращает список рассылок.
+    NEW: поддержка фильтров status и enabled.
+    """
+    stmt = select(Broadcast).order_by(Broadcast.id.desc()).limit(limit).offset(offset)
+    if status is not None:
+        stmt = stmt.where(Broadcast.status == status)
+    if enabled is not None:
+        stmt = stmt.where(Broadcast.enabled == enabled)
+    res = await session.execute(stmt)
     return list(res.scalars().all())
 
 
@@ -131,25 +174,20 @@ async def update_broadcast(session: AsyncSession, broadcast_id: int, patch: Broa
     """
     Частичное обновление. Если приходит scheduled_at — приводим к МСК-naive.
     Всегда обновляем updated_at (МСК-naive).
+    NEW: поддержка полей schedule и enabled.
     """
     obj = await session.get(Broadcast, broadcast_id)
     if not obj:
         return None
 
     data = patch.model_dump(exclude_unset=True)
+
     if "scheduled_at" in data and data["scheduled_at"] is not None:
         data["scheduled_at"] = to_msk_naive(data["scheduled_at"])
 
-    # content из pydantic-модели → dict
     if "content" in data and data["content"] is not None:
-        content_val = data["content"]
-        if hasattr(content_val, "model_dump"):
-            data["content"] = content_val.model_dump()
-        elif isinstance(content_val, dict):
-            data["content"] = content_val
-        else:
-            # на всякий случай
-            data["content"] = dict(content_val)
+        c = data["content"]
+        data["content"] = c.model_dump() if hasattr(c, "model_dump") else c
 
     for k, v in data.items():
         setattr(obj, k, v)
@@ -171,7 +209,7 @@ async def delete_broadcast(session: AsyncSession, broadcast_id: int) -> bool:
 
 async def send_now(session: AsyncSession, broadcast_id: int) -> Optional[Broadcast]:
     """
-    Переводит рассылку в статус 'scheduled' и ставит scheduled_at=сейчас (МСК-naive).
+    Немедленная отправка: переводим в 'scheduled' и scheduled_at=сейчас (МСК-naive).
     """
     obj = await session.get(Broadcast, broadcast_id)
     if not obj:
@@ -187,12 +225,16 @@ async def send_now(session: AsyncSession, broadcast_id: int) -> Optional[Broadca
 # ----------------- targets -----------------
 
 async def get_target(session: AsyncSession, broadcast_id: int) -> Optional[BroadcastTarget]:
-    res = await session.execute(select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id))
+    res = await session.execute(
+        select(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id).limit(1)
+    )
     return res.scalars().first()
 
 
 async def put_target(session: AsyncSession, broadcast_id: int, payload: BroadcastTargetCreate) -> BroadcastTarget:
-    # Один таргет на рассылку: удаляем старый
+    """
+    Один таргет на рассылку: удаляем старый и создаём новый.
+    """
     await session.execute(delete(BroadcastTarget).where(BroadcastTarget.broadcast_id == broadcast_id))
 
     if payload.type == "ids":
@@ -200,19 +242,23 @@ async def put_target(session: AsyncSession, broadcast_id: int, payload: Broadcas
     elif payload.type == "sql":
         obj = BroadcastTarget(broadcast_id=broadcast_id, type="sql", sql_text=payload.sql)
     else:  # kind
+        if payload.kind not in BROADCAST_KINDS:
+            raise ValueError(f"Unknown kind: {payload.kind}")
         obj = BroadcastTarget(broadcast_id=broadcast_id, type="kind", kind=payload.kind)
 
+    obj.created_at = now_msk_naive()
     session.add(obj)
     await session.commit()
     await session.refresh(obj)
     return obj
 
 
-# ----------------- deliveries (read-only list) -----------------
+# ----------------- deliveries -----------------
 
 async def list_deliveries(
     session: AsyncSession,
     broadcast_id: int,
+    *,
     status: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
@@ -225,59 +271,56 @@ async def list_deliveries(
     return list(res.scalars().all())
 
 
-# ----------------- NEW (optional): deliveries – materialize & report -----------------
-# Оставлено для совместимости; маршруты используют собственные реализации в routers/deliveries.py
-
-_INSERT_CHUNK = 1_000
-_UPDATE_CHUNK = 1_000
-_RESOLVE_CAP = 500_000
-
-
 async def deliveries_materialize(
     session: AsyncSession,
     broadcast_id: int,
     req: DeliveryMaterializeRequest,
 ) -> DeliveryMaterializeResponse:
+    """
+    Создаёт недостающие BroadcastDelivery(pending) для заданной аудитории.
+    Источник: req.ids или req.target или сохранённый таргет.
+    """
     limit = _cap(req.limit, _RESOLVE_CAP)
+
     if req.ids:
-        ids = _uniq_keep_order(list(req.ids), limit)
+        ids = _uniq_keep_order([int(x) for x in req.ids], limit)
     else:
-        ids = await _resolve_target_ids(session, broadcast_id, req.target, limit)
+        target = req.target or await _load_saved_target(session, broadcast_id)
+        if not target:
+            return DeliveryMaterializeResponse(total=0, created=0, existed=0)
+        ids = await _resolve_target_ids(session, target, limit=limit)
 
     if not ids:
         return DeliveryMaterializeResponse(total=0, created=0, existed=0)
 
-    existed: set[int] = set()
-    for i in range(0, len(ids), _INSERT_CHUNK):
-        chunk = ids[i : i + _INSERT_CHUNK]
-        rows = await session.execute(
-            select(BroadcastDelivery.user_id).where(
+    # уже существующие
+    existed_rows = await session.execute(
+        select(BroadcastDelivery.user_id).where(
+            and_(
                 BroadcastDelivery.broadcast_id == broadcast_id,
-                BroadcastDelivery.user_id.in_(chunk),
+                BroadcastDelivery.user_id.in_(ids),
             )
         )
-        existed.update(int(x) for x in rows.scalars().all())
-
+    )
+    existed = {int(x) for (x,) in existed_rows.all()}
     to_insert = [uid for uid in ids if uid not in existed]
-    created = 0
 
     if to_insert:
-        for i in range(0, len(to_insert), _INSERT_CHUNK):
-            chunk = to_insert[i : i + _INSERT_CHUNK]
-            values = [
-                {
-                    "broadcast_id": broadcast_id,
-                    "user_id": uid,
-                    "status": "pending",
-                    "attempts": 0,
-                }
-                for uid in chunk
-            ]
-            await session.execute(insert(BroadcastDelivery), values)
-            created += len(values)
+        values = [
+            {
+                "broadcast_id": broadcast_id,
+                "user_id": uid,
+                "status": "pending",
+                "attempts": 0,
+                "created_at": now_msk_naive(),
+            }
+            for uid in to_insert
+        ]
+        for i in range(0, len(values), _INSERT_CHUNK):
+            await session.execute(insert(BroadcastDelivery), values[i : i + _INSERT_CHUNK])
 
     await session.commit()
-    return DeliveryMaterializeResponse(total=len(ids), created=created, existed=len(existed))
+    return DeliveryMaterializeResponse(total=len(ids), created=len(to_insert), existed=len(existed))
 
 
 async def deliveries_report(
@@ -285,10 +328,17 @@ async def deliveries_report(
     broadcast_id: int,
     req: DeliveryReportRequest,
 ) -> DeliveryReportResponse:
+    """
+    Принимаем батч статусов доставки и обновляем строки по (broadcast_id, user_id).
+    Если записи нет — создаём.
+    """
     items = req.items or []
     if not items:
         return DeliveryReportResponse(processed=0, updated=0, inserted=0)
 
+    processed = updated = inserted = 0
+
+    # сгруппируем по uid
     by_uid: Dict[int, Any] = {}
     for it in items:
         try:
@@ -299,20 +349,22 @@ async def deliveries_report(
             continue
         by_uid[uid] = it
 
-    processed = updated = inserted = 0
-
     uids = list(by_uid.keys())
     for i in range(0, len(uids), _UPDATE_CHUNK):
-        chunk_uids = uids[i : i + _UPDATE_CHUNK]
+        chunk = uids[i : i + _UPDATE_CHUNK]
 
-        rows = await session.execute(
+        # какие уже есть
+        existing_rows = await session.execute(
             select(BroadcastDelivery.user_id).where(
-                BroadcastDelivery.broadcast_id == broadcast_id,
-                BroadcastDelivery.user_id.in_(chunk_uids),
+                and_(
+                    BroadcastDelivery.broadcast_id == broadcast_id,
+                    BroadcastDelivery.user_id.in_(chunk),
+                )
             )
         )
-        existing = set(int(x) for x in rows.scalars().all())
+        existing = {int(x) for (x,) in existing_rows.all()}
 
+        # обновим существующие
         for uid in existing:
             it = by_uid[uid]
             stmt = (
@@ -334,7 +386,8 @@ async def deliveries_report(
             updated += 1
             processed += 1
 
-        to_insert = [uid for uid in chunk_uids if uid not in existing]
+        # вставим недостающие
+        to_insert = [uid for uid in chunk if uid not in existing]
         if to_insert:
             values = []
             for uid in to_insert:
