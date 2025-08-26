@@ -36,7 +36,7 @@ async def create(payload: BroadcastCreate, session: AsyncSession = Depends(get_s
         logger.info(
             "[POST /broadcasts] Создание рассылки: "
             f"title={payload.title!r}, kind={payload.kind!r}, status={payload.status!r}, "
-            f"scheduled_at={payload.scheduled_at}, schedule={payload.schedule!r}, enabled={payload.enabled}"
+            f"schedule={payload.schedule!r}, enabled={payload.enabled}"
         )
         obj = await create_broadcast(session, payload)
         logger.info(f"[{obj.id}] - [POST /broadcasts] Рассылка создана")

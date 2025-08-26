@@ -162,15 +162,12 @@ class Broadcast(Base):
         nullable=False,
         server_default="draft",
     )
-    scheduled_at = Column(DateTime(timezone=False), nullable=True)
 
-    # NEW: расписание и флаг активности
+    # Оставляем только расписание и флаг активности
     schedule = Column(String(255), nullable=True)
     enabled = Column(Boolean, nullable=False, server_default=text("1"))
 
     created_by = Column(BigInteger, nullable=True)
-
-    # было: server_default=func.now(), onupdate=func.now()
     created_at = Column(DateTime(timezone=False), nullable=False, default=now_msk_naive)
     updated_at = Column(DateTime(timezone=False), nullable=False, default=now_msk_naive, onupdate=now_msk_naive)
 
@@ -211,7 +208,6 @@ class BroadcastDelivery(Base):
 
 # Индексы (под выборки и сортировку)
 Index("ix_broadcasts_status", Broadcast.status)
-Index("ix_broadcasts_scheduled_at", Broadcast.scheduled_at)
 Index("ix_btarget_broadcast_id", BroadcastTarget.broadcast_id)
 Index("ix_bdeliveries_broadcast_id", BroadcastDelivery.broadcast_id)
 Index(

@@ -23,7 +23,7 @@ from src.schemas import (
     DeliveryReportRequest,
     DeliveryReportResponse,
 )
-from src.time_msk import now_msk_naive, to_msk_naive
+from src.time_msk import now_msk_naive
 from src.audience_sql import exec_preview
 from src.utils import BROADCAST_KINDS
 
@@ -117,8 +117,7 @@ async def create_broadcast(session: AsyncSession, payload: BroadcastCreate) -> B
     """
     Создание рассылки.
     content — JSON (dict) вида {"text": "<html>", "files": "id1,id2"}.
-    Все таймстемпы выставляются приложением в МСК (naive).
-    NEW: сохраняем schedule и enabled.
+    NEW: сохраняем schedule и enabled (без scheduled_at).
     """
     content_dict: Dict[str, Any] = (
         payload.content.model_dump()
@@ -131,8 +130,7 @@ async def create_broadcast(session: AsyncSession, payload: BroadcastCreate) -> B
         title=payload.title,
         content=content_dict,
         status=payload.status,
-        scheduled_at=to_msk_naive(payload.scheduled_at) if payload.scheduled_at else None,
-        # NEW:
+        # scheduled_at — удалён из модели
         schedule=payload.schedule,
         enabled=bool(payload.enabled),
         created_by=payload.created_by,
@@ -172,18 +170,14 @@ async def list_broadcasts(
 
 async def update_broadcast(session: AsyncSession, broadcast_id: int, patch: BroadcastUpdate) -> Optional[Broadcast]:
     """
-    Частичное обновление. Если приходит scheduled_at — приводим к МСК-naive.
-    Всегда обновляем updated_at (МСК-naive).
-    NEW: поддержка полей schedule и enabled.
+    Частичное обновление.
+    NEW: поддержка полей schedule и enabled (scheduled_at отсутствует).
     """
     obj = await session.get(Broadcast, broadcast_id)
     if not obj:
         return None
 
     data = patch.model_dump(exclude_unset=True)
-
-    if "scheduled_at" in data and data["scheduled_at"] is not None:
-        data["scheduled_at"] = to_msk_naive(data["scheduled_at"])
 
     if "content" in data and data["content"] is not None:
         c = data["content"]
@@ -209,13 +203,13 @@ async def delete_broadcast(session: AsyncSession, broadcast_id: int) -> bool:
 
 async def send_now(session: AsyncSession, broadcast_id: int) -> Optional[Broadcast]:
     """
-    Немедленная отправка: переводим в 'scheduled' и scheduled_at=сейчас (МСК-naive).
+    Немедленная отправка: переводим в 'scheduled' и обновляем updated_at.
+    (schedule не трогаем — может остаться для повторений.)
     """
     obj = await session.get(Broadcast, broadcast_id)
     if not obj:
         return None
     obj.status = "scheduled"
-    obj.scheduled_at = now_msk_naive()
     obj.updated_at = now_msk_naive()
     await session.commit()
     await session.refresh(obj)

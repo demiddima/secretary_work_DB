@@ -152,33 +152,22 @@ class BroadcastContent(BaseModel):
         return (v or "").strip()
 
 
-# --- Broadcast (сокращено) ---
+# --- Broadcast ---
 class BroadcastBase(BaseModel):
     kind: Kind
     title: str = Field(max_length=255)
     content: BroadcastContent
     status: Status = Field(default="draft")
-    scheduled_at: Optional[datetime] = Field(
-        default=None,
-        description="Когда отправлять (МСК, Europe/Moscow). Наивное время без TZ.",
-        examples=["2025-08-23 14:30:00"],
-    )
-    # NEW: поля расписания и флага активности
+
+    # Только расписание и флаг активности
     schedule: Optional[str] = Field(
         default=None,
-        description="Строка расписания как в scheduled_announcements (cron или 'DD.MM.YYYY,period_days,HH:MM').",
+        description="Формат как в scheduled_announcements: cron или 'DD.MM.YYYY,period_days,HH:MM'.",
         examples=["0 12 * * 1", "27.08.2025,3,15:00"],
     )
     enabled: bool = Field(default=True, description="Флаг активности повторяющейся рассылки.")
 
     created_by: Optional[int] = Field(default=None)
-
-    @field_validator("scheduled_at")
-    @classmethod
-    def _normalize_scheduled_at(cls, v: Optional[datetime]) -> Optional[datetime]:
-        if v is None:
-            return v
-        return to_msk_naive(v)
 
 class BroadcastCreate(BroadcastBase):
     pass
@@ -188,17 +177,9 @@ class BroadcastUpdate(BaseModel):
     title: Optional[str] = Field(default=None, max_length=255)
     content: Optional[BroadcastContent] = None
     status: Optional[Status] = None
-    scheduled_at: Optional[datetime] = None
-    schedule: Optional[str] = None        # NEW
-    enabled: Optional[bool] = None        # NEW
+    schedule: Optional[str] = None
+    enabled: Optional[bool] = None
     created_by: Optional[int] = None
-
-    @field_validator("scheduled_at")
-    @classmethod
-    def _normalize_scheduled_at(cls, v: Optional[datetime]) -> Optional[datetime]:
-        if v is None:
-            return v
-        return to_msk_naive(v)
 
 class BroadcastRead(BroadcastBase):
     id: int

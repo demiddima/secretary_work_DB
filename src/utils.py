@@ -123,8 +123,6 @@ def broadcast_to_dict(b) -> Dict[str, Any]:
         "title": b.title,
         "content": b.content,
         "status": b.status,
-        "scheduled_at": b.scheduled_at,
-        # NEW:
         "schedule": getattr(b, "schedule", None),
         "enabled": bool(getattr(b, "enabled", True)),
         "created_by": b.created_by,
