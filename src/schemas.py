@@ -2,11 +2,11 @@
 # commit: обновлены схемы для Request, ReminderSetting, Notification; удалены старые Reminder и Notification
 # + МСК: scheduled_at теперь явно описано как «МСК, naive», и нормализуется в МСК через валидаторы
 
-from datetime import datetime
+from datetime import datetime, date, time
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, Literal, List
-from src.utils import BROADCAST_KINDS, BROADCAST_STATUSES
-from src.time_msk import to_msk_naive  # нормализация в МСК (naive)
+
+ScheduleType = Literal["cron", "n_days", "random"]
 
 # Существующие модели (не изменялись)
 
@@ -283,3 +283,205 @@ class DeliveryReportResponse(BaseModel):
     processed: int = 0
     updated: int = 0
     inserted: int = 0
+
+class AdButton(BaseModel):
+    enabled: bool = False
+    label: Optional[str] = None
+    url: Optional[str] = None
+
+    @field_validator("label")
+    @classmethod
+    def _label_if_enabled(cls, v, info):
+        if info.data.get("enabled") and not v:
+            raise ValueError("label обязателен при enabled=true")
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def _url_if_enabled(cls, v, info):
+        if info.data.get("enabled") and not v:
+            raise ValueError("url обязателен при enabled=true")
+        return v
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdButton(BaseModel):
+    enabled: bool = False
+    label: Optional[str] = None
+    url: Optional[str] = None
+
+    @field_validator("label")
+    @classmethod
+    def _label_if_enabled(cls, v, info):
+        if info.data.get("enabled") and not v:
+            raise ValueError("label обязателен при enabled=true")
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def _url_if_enabled(cls, v, info):
+        if info.data.get("enabled") and not v:
+            raise ValueError("url обязателен при enabled=true")
+        return v
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdContent(BaseModel):
+    text: str = Field(default="")
+    files: str = Field(default="")
+    button: AdButton = Field(default_factory=AdButton)
+    link_preview: bool = False
+
+    @field_validator("files")
+    @classmethod
+    def _normalize_files(cls, v: str) -> str:
+        return (v or "").strip()
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdBase(BaseModel):
+    title: str = Field(max_length=255)
+
+    chat_id: int
+    thread_id: Optional[int] = None
+
+    # ВАЖНО: теперь только content_json
+    content_json: AdContent
+
+    schedule_type: ScheduleType
+    schedule_cron: Optional[str] = Field(default=None, description="Cron для schedule_type=cron (5 полей)")
+
+    n_days_start_date: Optional[date] = None
+    n_days_time: Optional[time] = None
+    n_days_interval: Optional[int] = Field(default=None, ge=1, le=365)
+
+    enabled: bool = True
+    delete_previous: bool = True
+    dedupe_minute: bool = True
+
+    auto_delete_ttl_hours: Optional[int] = Field(default=None, ge=1, le=168)
+    auto_delete_cron: Optional[str] = Field(default=None, description="Cron для автоудаления")
+
+    created_by: Optional[int] = None
+    last_message_id: Optional[int] = None
+
+    # --- мягкий парсинг дат/времени для N-дней ---
+    @field_validator("n_days_start_date", mode="before")
+    @classmethod
+    def _parse_start_date(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, date):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            # поддержим и ISO, и ДД.ММ.ГГГГ
+            for fmt in ("%Y-%m-%d", "%d.%m.%Y"):
+                try:
+                    return datetime.strptime(s, fmt).date()
+                except ValueError:
+                    pass
+        raise ValueError("n_days_start_date: ожидается дата в формате YYYY-MM-DD или ДД.ММ.ГГГГ")
+
+    @field_validator("n_days_time", mode="before")
+    @classmethod
+    def _parse_time(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, time):
+            return v
+        if isinstance(v, str):
+            s = v.strip()
+            # поддержим HH:MM и HH:MM:SS
+            for fmt in ("%H:%M", "%H:%M:%S"):
+                try:
+                    return datetime.strptime(s, fmt).time()
+                except ValueError:
+                    pass
+        raise ValueError("n_days_time: ожидается время в формате HH:MM или HH:MM:SS")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdCreate(AdBase):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdUpdate(BaseModel):
+    title: Optional[str] = None
+
+    chat_id: Optional[int] = None
+    thread_id: Optional[int] = None
+
+    content_json: Optional[AdContent] = None
+
+    schedule_type: Optional[ScheduleType] = None
+    schedule_cron: Optional[str] = None
+
+    n_days_start_date: Optional[date] = None
+    n_days_time: Optional[time] = None
+    n_days_interval: Optional[int] = Field(default=None, ge=1, le=365)
+
+    enabled: Optional[bool] = None
+    delete_previous: Optional[bool] = None
+    dedupe_minute: Optional[bool] = None
+
+    auto_delete_ttl_hours: Optional[int] = Field(default=None, ge=1, le=168)
+    auto_delete_cron: Optional[str] = None
+
+    created_by: Optional[bool] = None
+    last_message_id: Optional[int] = None
+
+    # те же валидаторы для частичного апдейта
+    @field_validator("n_days_start_date", mode="before")
+    @classmethod
+    def _parse_start_date_update(cls, v):
+        return AdBase._parse_start_date(v)
+
+    @field_validator("n_days_time", mode="before")
+    @classmethod
+    def _parse_time_update(cls, v):
+        return AdBase._parse_time(v)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AdRead(AdBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Random branch ---
+
+class RandomBranchBase(BaseModel):
+    chat_id: int
+    thread_id: Optional[int] = None
+    window_from: time
+    window_to: time
+    rebuild_time: time
+    enabled: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RandomBranchCreate(RandomBranchBase):
+    pass
+
+
+class RandomBranchUpdate(BaseModel):
+    window_from: Optional[time] = None
+    window_to: Optional[time] = None
+    rebuild_time: Optional[time] = None
+    enabled: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RandomBranchRead(RandomBranchBase):
+    id: int

@@ -2,10 +2,9 @@
 import sqlalchemy as sa
 from sqlalchemy import (
     Column, BigInteger, String, DateTime, Boolean, SmallInteger, ForeignKey,
-    UniqueConstraint, Integer, Text, Enum, Index, text, JSON
+    UniqueConstraint, Integer, Text, Enum, Index, text, JSON, Date, Time
 )
 from sqlalchemy.orm import relationship
-# from sqlalchemy.ext.hybrid import hybrid_property  # не используется
 from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime
 
 from src.utils import BROADCAST_KINDS, BROADCAST_STATUSES
@@ -215,3 +214,56 @@ Index(
     BroadcastDelivery.broadcast_id, BroadcastDelivery.status,
     mysql_length={"status": 10}
 )
+
+# Ad и AdRandomBranch
+class Ad(Base):
+    __tablename__ = "ads"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), nullable=False)
+
+    chat_id = Column(BigInteger, nullable=False)
+    thread_id = Column(Integer, nullable=True)
+
+    # {"text": str, "files": "file_id1,file_id2", "button": {"enabled": bool, "label": str, "url": str}, "link_preview": bool}
+    content_json = Column(JSON, nullable=False)
+
+    schedule_type = Column(Enum("cron", "n_days", "random", name="ad_schedule_type"), nullable=False)
+    schedule_cron = Column(String(255), nullable=True)
+
+    n_days_start_date = Column(Date, nullable=True)
+    n_days_time = Column(Time, nullable=True)
+    n_days_interval = Column(SmallInteger, nullable=True)
+
+    enabled = Column(Boolean, nullable=False, server_default=text("1"))
+    delete_previous = Column(Boolean, nullable=False, server_default=text("1"))
+    dedupe_minute = Column(Boolean, nullable=False, server_default=text("1"))
+
+    auto_delete_ttl_hours = Column(SmallInteger, nullable=True)
+    auto_delete_cron = Column(String(255), nullable=True)
+
+    last_message_id = Column(BigInteger, nullable=True)
+
+    created_by = Column(BigInteger, nullable=True)
+    created_at = Column(DateTime(timezone=False), nullable=False, default=now_msk_naive)
+    updated_at = Column(DateTime(timezone=False), nullable=False, default=now_msk_naive, onupdate=now_msk_naive)
+
+
+Index("ix_ads_target", Ad.chat_id, Ad.thread_id, Ad.enabled)
+Index("ix_ads_schedule_type", Ad.schedule_type, Ad.enabled)
+
+
+class AdRandomBranch(Base):
+    __tablename__ = "ad_random_branches"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    chat_id = Column(BigInteger, nullable=False)
+    thread_id = Column(Integer, nullable=True)
+    window_from = Column(Time, nullable=False)   # HH:MM (MSK)
+    window_to = Column(Time, nullable=False)     # HH:MM (MSK)
+    rebuild_time = Column(Time, nullable=False)  # HH:MM (MSK)
+    enabled = Column(Boolean, nullable=False, server_default=text("1"))
+
+    __table_args__ = (
+        UniqueConstraint("chat_id", "thread_id", name="uq_ad_random_branch_chat_thread"),
+    )

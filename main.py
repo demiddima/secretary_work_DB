@@ -21,9 +21,10 @@ from src.scheduler import setup_scheduler
 from src.routers import subscriptions 
 from src.routers import (
     chats, users, memberships, scheduled_announcements,
-    invite_links, algorithm, links, health, broadcasts_router, audiences_router, deliveries as deliveries_router
+    invite_links, algorithm, links, health, broadcasts_router, audiences_router, deliveries as deliveries_router,
 )
 from src.middleware import SuppressRootAccessLogMiddleware
+from src.routers.ads import router as ads_router, rb_router as ads_rb_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -64,7 +65,6 @@ async def catch_all_exceptions(request: Request, call_next):
 
 register_exception_handlers(app)
 app.add_middleware(SuppressRootAccessLogMiddleware)
-
 app.include_router(chats.router)
 app.include_router(users.router)
 app.include_router(memberships.router)
@@ -78,3 +78,5 @@ app.include_router(broadcasts_router)
 app.include_router(broadcasts_router)
 app.include_router(audiences_router)
 app.include_router(deliveries_router.router)
+app.include_router(ads_router)
+app.include_router(ads_rb_router)

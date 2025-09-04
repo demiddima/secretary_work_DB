@@ -7,8 +7,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict
 
 from sqlalchemy.inspection import inspect
 
@@ -159,4 +158,44 @@ def delivery_to_dict(d) -> Dict[str, Any]:
         "message_id": d.message_id,
         "sent_at": d.sent_at,
         "created_at": d.created_at,
+    }
+    
+    
+def ad_to_dict(ad) -> Dict[str, Any]:
+    if ad is None:
+        return {}
+    return {
+        "id": ad.id,
+        "title": ad.title,
+        "chat_id": ad.chat_id,
+        "thread_id": ad.thread_id,
+        "content": ad.content_json,
+        "schedule_type": ad.schedule_type,
+        "schedule_cron": ad.schedule_cron,
+        "n_days_start_date": ad.n_days_start_date,
+        "n_days_time": ad.n_days_time,
+        "n_days_interval": ad.n_days_interval,
+        "enabled": bool(ad.enabled),
+        "delete_previous": bool(ad.delete_previous),
+        "dedupe_minute": bool(ad.dedupe_minute),
+        "auto_delete_ttl_hours": ad.auto_delete_ttl_hours,
+        "auto_delete_cron": ad.auto_delete_cron,
+        "last_message_id": ad.last_message_id,
+        "created_by": ad.created_by,
+        "created_at": ad.created_at,
+        "updated_at": ad.updated_at,
+    }
+
+
+def random_branch_to_dict(b) -> Dict[str, Any]:
+    if b is None:
+        return {}
+    return {
+        "id": b.id,
+        "chat_id": b.chat_id,
+        "thread_id": b.thread_id,
+        "window_from": b.window_from,
+        "window_to": b.window_to,
+        "rebuild_time": b.rebuild_time,
+        "enabled": bool(b.enabled),
     }
