@@ -48,26 +48,55 @@ async def delete_user(session: AsyncSession, id: int):
 
 @retry_db
 async def upsert_user_to_chat(session: AsyncSession, user_id: int, chat_id: int):
+    # Быстрая проверка существования
     stmt = select(UserMembership).where(
         UserMembership.user_id == user_id,
         UserMembership.chat_id == chat_id
     )
     res = await session.execute(stmt)
-    membership = res.scalar_one_or_none()
-    if membership is not None:
-        return membership
+    existed = res.scalar_one_or_none()
+    if existed is not None:
+        return existed
 
-    membership = UserMembership(user_id=user_id, chat_id=chat_id)
-    session.add(membership)
+    # Пытаемся вставить
+    obj = UserMembership(user_id=user_id, chat_id=chat_id)
+    session.add(obj)
     try:
         await session.flush()
-    except IntegrityError:
+    except IntegrityError as e:
+        # Откатываем текущее действие, чтобы сессия осталась консистентной
         await session.rollback()
-        res = await session.execute(stmt)
-        membership = res.scalar_one()
 
+        # Выясняем код MySQL (PyMySQL/aiomysql обычно кладут int-код в orig.args[0])
+        code = None
+        orig = getattr(e, "orig", None)
+        if orig is not None:
+            try:
+                code = int(getattr(orig, "args", [None])[0])
+            except Exception:
+                code = None
+
+        if code == 1062:
+            # Дубликат: кто-то успел вставить — читаем спокойно
+            res2 = await session.execute(stmt)
+            dup = res2.scalar_one_or_none()
+            if dup is not None:
+                return dup
+            # Если не нашли — пробрасываем исходную ошибку (нестандартная ситуация)
+            raise
+
+        if code == 1452:
+            # FK нарушен: нет user или chat — это 422, а не 500
+            raise ValueError(
+                f"FK violation for membership: ensure user_id={user_id} and chat_id={chat_id} exist"
+            ) from e
+
+        # Иные причины — пробрасываем
+        raise
+
+    # Успешно
     await session.commit()
-    return membership
+    return obj
 
 @retry_db
 async def remove_user_from_chat(session: AsyncSession, user_id: int, chat_id: int):

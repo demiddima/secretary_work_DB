@@ -11,20 +11,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/memberships", tags=["memberships"])
 
 
-@router.post("/", response_model=None)
+@router.post("/", response_model=dict)
 async def upsert_user_to_chat(
     user_id: int,
     chat_id: int,
     session: AsyncSession = Depends(get_session)
 ):
     try:
-        # Логируем только важный вход: добавление пользователя в чат
         logger.info(
             f"[{user_id}] - [POST /memberships/] Запрос на добавление user_id={user_id} в чат chat_id={chat_id}"
         )
-        # CRUD-функция уже проверяет существование и идемпотентно добавляет
         await crud.upsert_user_to_chat(session, user_id=user_id, chat_id=chat_id)
         return {"ok": True}
+    except ValueError as e:
+        # Нарушение FK/валидация — это 422, а не 500
+        logger.error(
+            f"[{user_id}] - [POST /memberships/] FK/validation error: user_id={user_id}, chat_id={chat_id}, err={e}"
+        )
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(
             f"[{user_id}] - [POST /memberships/] Ошибка при добавлении пользователя "

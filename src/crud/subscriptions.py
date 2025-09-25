@@ -1,6 +1,6 @@
 # src/crud/subscriptions.py
 from .base import (
-    retry_db, AsyncSession, select, update, delete, mysql_insert
+    retry_db, AsyncSession, select, update, delete, mysql_insert, IntegrityError
 )
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy import literal
@@ -16,16 +16,15 @@ DEFAULTS = {
 
 @retry_db
 async def get_user_subscriptions(session: AsyncSession, user_id: int) -> UserSubscription | None:
-    stmt = select(UserSubscription).where(UserSubscription.user_id == user_id)
-    res = await session.execute(stmt)
+    res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
     return res.scalar_one_or_none()
 
 
 @retry_db
-async def ensure_user_subscriptions_defaults(session: AsyncSession, user_id: int) -> UserSubscription:
+async def ensure_user_subscriptions_defaults(session: AsyncSession, user_id: int) -> UserSubscription | None:
     """
-    Создаёт запись с дефолтами, если её нет.
-    Если запись уже есть — "освежает" updated_at.
+    Создаёт запись с дефолтами, если её нет. Если есть — освежает updated_at.
+    На нарушение FK (нет user) возбуждаем ValueError — пусть роутер отдаёт 422 (или вызывающая сторона игнорирует).
     """
     now = now_msk_naive()
     stmt = mysql_insert(UserSubscription).values(
@@ -36,14 +35,29 @@ async def ensure_user_subscriptions_defaults(session: AsyncSession, user_id: int
         created_at=now,
         updated_at=now,
     ).on_duplicate_key_update(
-        # no-op по флагам, но обновим updated_at
-        updated_at=now,
+        # просто освежим updated_at, флаги не трогаем
+        updated_at=literal(now),
     )
-    await session.execute(stmt)
-    await session.commit()
+
+    try:
+        await session.execute(stmt)
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        # FK (MySQL 1452): Cannot add or update a child row
+        code = None
+        orig = getattr(e, "orig", None)
+        if orig is not None:
+            try:
+                code = int(getattr(orig, "args", [None])[0])
+            except Exception:
+                code = None
+        if code == 1452:
+            raise ValueError(f"FK violation for subscriptions: ensure user_id={user_id} exists") from e
+        raise
 
     res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
-    return res.scalar_one()
+    return res.scalar_one_or_none()
 
 
 @retry_db
@@ -56,28 +70,47 @@ async def put_user_subscriptions(
     important_enabled: bool,
 ) -> UserSubscription:
     """
-    Upsert (PUT): вставка или полное обновление всех флагов.
-    Всегда проставляем created_at/updated_at в МСК.
+    Идемпотентный upsert (PUT): вставка или полная замена всех флагов.
+    created_at/updated_at — MSK-naive.
     """
     now = now_msk_naive()
     stmt = mysql_insert(UserSubscription).values(
         user_id=user_id,
-        news_enabled=news_enabled,
-        meetings_enabled=meetings_enabled,
-        important_enabled=important_enabled,
+        news_enabled=bool(news_enabled),
+        meetings_enabled=bool(meetings_enabled),
+        important_enabled=bool(important_enabled),
         created_at=now,
         updated_at=now,
     ).on_duplicate_key_update(
-        news_enabled=literal(news_enabled),
-        meetings_enabled=literal(meetings_enabled),
-        important_enabled=literal(important_enabled),
-        updated_at=now,
+        news_enabled=literal(bool(news_enabled)),
+        meetings_enabled=literal(bool(meetings_enabled)),
+        important_enabled=literal(bool(important_enabled)),
+        updated_at=literal(now),
     )
-    await session.execute(stmt)
-    await session.commit()
+
+    try:
+        await session.execute(stmt)
+        await session.commit()
+    except IntegrityError as e:
+        await session.rollback()
+        code = None
+        orig = getattr(e, "orig", None)
+        if orig is not None:
+            try:
+                code = int(getattr(orig, "args", [None])[0])
+            except Exception:
+                code = None
+        # FK нарушен: нет такого пользователя
+        if code == 1452:
+            raise ValueError(f"FK violation for subscriptions: ensure user_id={user_id} exists") from e
+        raise
 
     res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
-    return res.scalar_one()
+    sub = res.scalar_one_or_none()
+    if sub is None:
+        # очень редкий случай гонки/удаления между commit и select
+        raise NoResultFound
+    return sub
 
 
 @retry_db
@@ -87,14 +120,16 @@ async def update_user_subscriptions(
     **fields,
 ) -> UserSubscription:
     """
-    Patch (частичное обновление полей) + updated_at (МСК).
+    PATCH (частичное обновление) + updated_at (MSK).
+    Если записи нет — NoResultFound.
     """
     allowed = {k: v for k, v in fields.items() if k in {"news_enabled", "meetings_enabled", "important_enabled"}}
+    res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
+    sub = res.scalar_one_or_none()
+    if sub is None:
+        raise NoResultFound
+
     if not allowed:
-        res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
-        sub = res.scalar_one_or_none()
-        if sub is None:
-            raise NoResultFound
         return sub
 
     allowed["updated_at"] = now_msk_naive()
@@ -106,10 +141,39 @@ async def update_user_subscriptions(
     await session.commit()
 
     res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
+    return res.scalar_one()
+
+
+@retry_db
+async def toggle_user_subscription(session: AsyncSession, *, user_id: int, kind: str) -> UserSubscription:
+    """
+    Переключение одного из флагов: kind in {"news", "meetings", "important"}.
+    Если записи нет — NoResultFound.
+    """
+    if kind not in {"news", "meetings", "important"}:
+        raise ValueError("invalid kind")
+
+    res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
     sub = res.scalar_one_or_none()
     if sub is None:
         raise NoResultFound
-    return sub
+
+    current = {
+        "news": bool(sub.news_enabled),
+        "meetings": bool(sub.meetings_enabled),
+        "important": bool(sub.important_enabled),
+    }
+    new_value = not current[kind]
+
+    await session.execute(
+        update(UserSubscription)
+        .where(UserSubscription.user_id == user_id)
+        .values({f"{kind}_enabled": new_value, "updated_at": now_msk_naive()})
+    )
+    await session.commit()
+
+    res = await session.execute(select(UserSubscription).where(UserSubscription.user_id == user_id))
+    return res.scalar_one()
 
 
 @retry_db

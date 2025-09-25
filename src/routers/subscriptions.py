@@ -1,8 +1,10 @@
 # src/routers/subscriptions.py
+from __future__ import annotations
 
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import NoResultFound
 
 from src.dependencies import get_session
 from src.schemas import (
@@ -18,23 +20,17 @@ router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
 
 @router.get("/{user_id}", response_model=UserSubscriptionModel)
-async def get_subscriptions(user_id: int, session: AsyncSession = Depends(get_session)):
-    """
-    Возвращает подписки пользователя.
-    Если записи нет — создаёт с дефолтами и возвращает её.
-    """
+async def get_user_subscriptions(user_id: int, session: AsyncSession = Depends(get_session)):
     try:
-        sub = await crud.get_user_subscriptions(session, user_id)
-        if sub is None:
-            sub = await crud.ensure_user_subscriptions_defaults(session, user_id)
-            logger.info(f"[{user_id}] - [GET /subscriptions/{user_id}] Подписки отсутствовали — созданы значения по умолчанию")
-        else:
-            logger.info(f"[{user_id}] - [GET /subscriptions/{user_id}] Подписки получены")
-        return sub
+        obj = await crud.get_user_subscriptions(session, user_id)
+        if not obj:
+            raise HTTPException(status_code=404, detail="Подписки не найдены")
+        logger.info(f"[{user_id}] - [GET /subscriptions/{user_id}] Возвращены подписки")
+        return obj
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[{user_id}] - [GET /subscriptions/{user_id}] Ошибка при получении подписок: {e}")
+        logger.error(f"[{user_id}] - [GET /subscriptions/{user_id}] Ошибка: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при получении подписок")
 
 
@@ -58,6 +54,10 @@ async def put_subscriptions(
         )
         logger.info(f"[{user_id}] - [PUT /subscriptions/{user_id}] Подписки сохранены")
         return sub
+    except ValueError as e:
+        # FK/валидация
+        logger.error(f"[{user_id}] - [PUT /subscriptions/{user_id}] FK/validation error: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"[{user_id}] - [PUT /subscriptions/{user_id}] Ошибка при сохранении подписок: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при сохранении подписок")
@@ -70,18 +70,12 @@ async def patch_subscriptions(
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        changes = payload.model_dump(exclude_none=True)
-        logger.info(
-            f"[{user_id}] - [PATCH /subscriptions/{user_id}] "
-            f"Изменение подписок (вход): {changes}"
-        )
-        sub = await crud.update_user_subscriptions(
-            session,
-            user_id,
-            **changes
-        )
-        logger.info(f"[{user_id}] - [PATCH /subscriptions/{user_id}] Подписки обновлены")
+        data = payload.model_dump(exclude_none=True)
+        sub = await crud.update_user_subscriptions(session, user_id, **data)
+        logger.info(f"[{user_id}] - [PATCH /subscriptions/{user_id}] Подписки обновлены: {list(data.keys())}")
         return sub
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail="Подписки не найдены")
     except Exception as e:
         logger.error(f"[{user_id}] - [PATCH /subscriptions/{user_id}] Ошибка при обновлении подписок: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при обновлении подписок")
@@ -90,22 +84,23 @@ async def patch_subscriptions(
 @router.post("/{user_id}/toggle", response_model=UserSubscriptionModel)
 async def toggle_subscription(
     user_id: int,
-    payload: ToggleKind,
+    payload: ToggleKind = Body(...),
     session: AsyncSession = Depends(get_session),
 ):
     try:
-        logger.info(f"[{user_id}] - [POST /subscriptions/{user_id}/toggle] Переключение подписки (вход): kind={payload.kind}")
-        sub = await crud.toggle_user_subscription(session, user_id, payload.kind)
-        logger.info(f"[{user_id}] - [POST /subscriptions/{user_id}/toggle] Подписка переключена: kind={payload.kind}")
+        sub = await crud.toggle_user_subscription(session, user_id=user_id, kind=payload.kind)
+        logger.info(f"[{user_id}] - [POST /subscriptions/{user_id}/toggle] Переключили {payload.kind}")
         return sub
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Недопустимый тип подписки")
+    except NoResultFound:
+        raise HTTPException(status_code=404, detail="Подписки не найдены")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"[{user_id}] - [POST /subscriptions/{user_id}/toggle] Ошибка при переключении подписки: {e}")
         raise HTTPException(status_code=500, detail="Ошибка при переключении подписки")
 
 
-@router.delete("/{user_id}", response_model=None)
+@router.delete("/{user_id}", response_model=dict)
 async def delete_subscriptions(user_id: int, session: AsyncSession = Depends(get_session)):
     try:
         await crud.delete_user_subscriptions(session, user_id)
