@@ -1,6 +1,4 @@
 # src/schemas.py
-# commit: обновлены схемы для Request, ReminderSetting, Notification; удалены старые Reminder и Notification
-# + МСК: scheduled_at теперь явно описано как «МСК, naive», и нормализуется в МСК через валидаторы
 
 from datetime import datetime, date, time
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -485,3 +483,14 @@ class RandomBranchUpdate(BaseModel):
 
 class RandomBranchRead(RandomBranchBase):
     id: int
+    
+    
+# Новая схема для объединенного запроса
+class UserWithChatModel(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    terms_accepted: Optional[bool] = None
+    chat_id: int  # Добавляем chat_id для добавления пользователя в чат
+
+    class Config:
+        orm_mode = True  # Для работы с SQLAlchemy объектами

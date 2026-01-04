@@ -37,6 +37,35 @@ async def upsert_user(
         raise HTTPException(status_code=500, detail="Ошибка при сохранении пользователя")
 
 
+# Добавленный маршрут для объединенного запроса (upsert_user + upsert_user_to_chat)
+@router.put("/{user_id}/upsert_with_membership", response_model=UserModel)
+async def upsert_user_and_membership(
+    user_id: int,
+    user: UserModel = Body(...),
+    chat_id: int = Body(...),  # Добавляем chat_id для добавления в чат
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        logger.info(
+            f"[{user_id}] - [PUT /users/{user_id}/upsert_with_membership] "
+            f"Создание/обновление пользователя и добавление в чат (вход): "
+            f"id={user_id}, username={user.username!r}, full_name={user.full_name!r}, chat_id={chat_id}, terms_accepted={user.terms_accepted}"
+        )
+        # Новый объединённый запрос
+        await crud.upsert_user_and_membership(
+            session,
+            user_id=user_id,
+            username=user.username,
+            full_name=user.full_name,
+            chat_id=chat_id,
+            terms_accepted=user.terms_accepted,
+        )
+        return {"ok": True}
+    except Exception as e:
+        logger.error(f"[{user_id}] - [PUT /users/{user_id}/upsert_with_membership] Ошибка: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка при сохранении пользователя и добавлении в чат")
+
+
 @router.put("/{user_id}", response_model=None)
 async def update_user(
     user_id: int,

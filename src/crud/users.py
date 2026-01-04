@@ -1,4 +1,6 @@
 
+# src/crud/users.py
+
 from .base import retry_db, AsyncSession, select, delete, func, update, mysql_insert, IntegrityError
 from src.models import User, UserMembership
 
@@ -132,3 +134,26 @@ async def list_memberships_by_chat(
     res = await session.execute(q)
     return [{"user_id": int(r[0])} for r in res.fetchall()]
 
+@retry_db
+async def upsert_user_and_membership(
+    session: AsyncSession,
+    user_id: int,
+    username: str,
+    full_name: str,
+    chat_id: int,
+    terms_accepted: bool | None = None
+):
+    """
+    Обновляет или добавляет пользователя в базу данных и добавляет его в чат.
+    """
+    # Обновляем или добавляем пользователя
+    await upsert_user(
+        session,
+        id=user_id,
+        username=username,
+        full_name=full_name,
+        terms_accepted=terms_accepted
+    )
+
+    # Добавляем пользователя в чат
+    await upsert_user_to_chat(session, user_id=user_id, chat_id=chat_id)
