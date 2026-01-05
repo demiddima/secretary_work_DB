@@ -1,10 +1,8 @@
+
+# src/crud/users.py
+
 from .base import retry_db, AsyncSession, select, delete, func, update, mysql_insert, IntegrityError
 from src.models import User, UserMembership
-import logging
-
-# Настроим логирование
-logger = logging.getLogger("uvicorn.error")
-logging.basicConfig(level=logging.INFO)
 
 @retry_db
 async def upsert_user(
@@ -15,9 +13,6 @@ async def upsert_user(
     full_name: str | None,
     terms_accepted: bool | None = None
 ) -> User:
-    # Логируем входящие данные перед записью в БД
-    logger.info(f"Upsert user data: id={id}, username={username}, full_name={full_name}, terms_accepted={terms_accepted}")
-
     terms_val = False if terms_accepted is None else terms_accepted
     stmt = mysql_insert(User).values(
         id=id,
@@ -25,10 +20,6 @@ async def upsert_user(
         full_name=full_name,
         terms_accepted=terms_val
     )
-    
-    # Логируем SQL-запрос перед его выполнением
-    logger.info(f"SQL to be executed: {stmt}")
-
     update_fields: dict[str, object] = {
         "username": stmt.inserted.username,
         "full_name": stmt.inserted.full_name,
@@ -36,13 +27,8 @@ async def upsert_user(
     if terms_accepted is not None:
         update_fields["terms_accepted"] = stmt.inserted.terms_accepted
     stmt = stmt.on_duplicate_key_update(**update_fields)
-
     await session.execute(stmt)
     await session.commit()
-
-    # Логируем, что пользователь был успешно обновлен или добавлен
-    logger.info(f"User with id={id} was upserted successfully")
-
     return await session.get(User, id)
 
 @retry_db
