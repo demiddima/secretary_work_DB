@@ -41,6 +41,12 @@ class CleanRequestDataMiddleware(BaseHTTPMiddleware):
                 # Логируем перед очисткой
                 logger.info("Cleaning data...")
 
+                # Проверяем формат тела перед очисткой
+                if isinstance(body_str, str):
+                    logger.info(f"Request body as string before cleaning: {body_str}")
+                else:
+                    logger.error("Request body is not a string")
+
                 # Удаляем конкретные ссылки и HTML-разметку
                 cleaned_body_str = self.clean_telegram_link(body_str)
 
@@ -52,6 +58,8 @@ class CleanRequestDataMiddleware(BaseHTTPMiddleware):
 
                 # Преобразуем очищенную строку в объект JSON, если это необходимо
                 body_data = json.loads(cleaned_body_str)
+
+                # Логируем после преобразования
                 logger.info(f"Parsed JSON body: {body_data}")
 
             except Exception as e:
