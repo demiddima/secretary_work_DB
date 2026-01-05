@@ -6,11 +6,9 @@
 """
 
 from __future__ import annotations
-
 from typing import Any, Dict
-
 from sqlalchemy.inspection import inspect
-
+import re
 
 # --- Enums -------------------------------------------------------------------
 
@@ -199,3 +197,4 @@ def random_branch_to_dict(b) -> Dict[str, Any]:
         "rebuild_time": b.rebuild_time,
         "enabled": bool(b.enabled),
     }
+    

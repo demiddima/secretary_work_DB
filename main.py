@@ -23,7 +23,7 @@ from src.routers import (
     chats, users, memberships, scheduled_announcements,
     invite_links, algorithm, links, health, broadcasts_router, audiences_router, deliveries as deliveries_router,
 )
-from src.middleware import SuppressRootAccessLogMiddleware
+from src.middleware import SuppressRootAccessLogMiddleware, CleanRequestDataMiddleware
 from src.routers.ads import router as ads_router, rb_router as ads_rb_router
 
 @asynccontextmanager
@@ -64,6 +64,7 @@ async def catch_all_exceptions(request: Request, call_next):
 
 
 register_exception_handlers(app)
+app.add_middleware(CleanRequestDataMiddleware)
 app.add_middleware(SuppressRootAccessLogMiddleware)
 app.include_router(chats.router)
 app.include_router(users.router)
