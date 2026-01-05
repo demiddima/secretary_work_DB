@@ -32,7 +32,7 @@ class CleanRequestDataMiddleware(BaseHTTPMiddleware):
         # Преобразуем байты в строку
         body_str = body.decode("utf-8")
 
-        # Логируем тело запроса
+        # Логируем входное тело запроса
         logger.info(f"Received request body: {body_str}")
 
         # Если тело не пустое, очищаем данные
@@ -88,7 +88,7 @@ class CleanRequestDataMiddleware(BaseHTTPMiddleware):
         logger.info(f"Cleaning string: {input_string}")
         
         # Заменяем строки href="tg://resolve?domain=<domain_value"> и </a> на пустоту
-        input_string = re.sub(r'href="tg://resolve\?domain=([a-zA-Z0-9_]+)">\1', r'\1', input_string)
+        input_string = re.sub(r'href="tg://resolve\?domain=([a-zA-Z0-9_]+)">', r'\1', input_string)
         input_string = input_string.replace('</a>', '')
 
         # Логируем результат
