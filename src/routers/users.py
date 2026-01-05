@@ -37,15 +37,20 @@ async def upsert_user(
         raise HTTPException(status_code=500, detail="Ошибка при сохранении пользователя")
 
 
-# Добавленный маршрут для объединенного запроса (upsert_user + upsert_user_to_chat)
 @router.put("/{user_id}/upsert_with_membership", response_model=UserModel)
 async def upsert_user_and_membership(
-    user_id: int,
+    user_id: str,  # Передаем как строку, чтобы работать с символами
     user: UserModel = Body(...),
     chat_id: int = Body(...),  # Добавляем chat_id для добавления в чат
     session: AsyncSession = Depends(get_session),
 ):
     try:
+        # Очистка значения user_id (убираем BOM и пробелы)
+        user_id = user_id.strip().lstrip('\ufeff')  # Убираем BOM и лишние пробелы
+        
+        # Преобразуем в целое число
+        user_id = int(user_id)
+
         logger.info(
             f"[{user_id}] - [PUT /users/{user_id}/upsert_with_membership] "
             f"Создание/обновление пользователя и добавление в чат (вход): "
