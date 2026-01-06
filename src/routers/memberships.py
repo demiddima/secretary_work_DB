@@ -1,11 +1,13 @@
 # src/routers/memberships.py
+# commit: вариант A — list_by_chat возвращает list[int] (без dict), остальные ответы оставлены ok-обёрткой
+
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
 
-from src.dependencies import get_session
 from src import crud
+from src.dependencies import get_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/memberships", tags=["memberships"])
@@ -15,47 +17,32 @@ router = APIRouter(prefix="/memberships", tags=["memberships"])
 async def upsert_user_to_chat(
     user_id: int,
     chat_id: int,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     try:
-        logger.info(
-            f"[{user_id}] - [POST /memberships/] Запрос на добавление user_id={user_id} в чат chat_id={chat_id}"
-        )
+        logger.info(f"[{user_id}] - [POST /memberships/] add user_id={user_id} to chat_id={chat_id}")
         await crud.upsert_user_to_chat(session, user_id=user_id, chat_id=chat_id)
         return {"ok": True}
     except ValueError as e:
-        # Нарушение FK/валидация — это 422, а не 500
-        logger.error(
-            f"[{user_id}] - [POST /memberships/] FK/validation error: user_id={user_id}, chat_id={chat_id}, err={e}"
-        )
+        logger.error(f"[{user_id}] - [POST /memberships/] FK/validation error: {e}")
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        logger.error(
-            f"[{user_id}] - [POST /memberships/] Ошибка при добавлении пользователя "
-            f"user_id={user_id} в чат chat_id={chat_id}: {e}"
-        )
+        logger.error(f"[{user_id}] - [POST /memberships/] Ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при добавлении пользователя в чат")
 
 
-@router.delete("/", response_model=None)
+@router.delete("/", response_model=dict)
 async def remove_user_from_chat(
     user_id: int,
     chat_id: int,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         await crud.remove_user_from_chat(session, user_id=user_id, chat_id=chat_id)
-        # Логируем успешное удаление пользователя из чата
-        logger.info(
-            f"[{user_id}] - [DELETE /memberships/] Пользователь user_id={user_id} "
-            f"успешно удалён из чата chat_id={chat_id}"
-        )
+        logger.info(f"[{user_id}] - [DELETE /memberships/] removed from chat_id={chat_id}")
         return {"ok": True}
     except Exception as e:
-        logger.error(
-            f"[{user_id}] - [DELETE /memberships/] Ошибка при удалении пользователя "
-            f"user_id={user_id} из чата chat_id={chat_id}: {e}"
-        )
+        logger.error(f"[{user_id}] - [DELETE /memberships/] Ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при удалении пользователя из чата")
 
 
@@ -63,24 +50,18 @@ async def remove_user_from_chat(
 async def is_user_in_chat(
     user_id: int,
     chat_id: int,
-    session: AsyncSession = Depends(get_session)
+    session: AsyncSession = Depends(get_session),
 ):
     try:
         exists = await crud.is_user_in_chat(session, user_id=user_id, chat_id=chat_id)
-        # Логируем результат проверки подписки пользователя на чат
-        logger.info(
-            f"[{user_id}] - [GET /memberships/] Проверка подписки: user_id={user_id}, "
-            f"chat_id={chat_id}, подписан={exists}"
-        )
+        logger.info(f"[{user_id}] - [GET /memberships/] chat_id={chat_id}, exists={exists}")
         return exists
     except Exception as e:
-        logger.error(
-            f"[{user_id}] - [GET /memberships/] Ошибка при проверке подписки "
-            f"user_id={user_id} в чат chat_id={chat_id}: {e}"
-        )
+        logger.error(f"[{user_id}] - [GET /memberships/] Ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при проверке подписки пользователя")
-    
-@router.get("/by-chat", response_model=list[dict])
+
+
+@router.get("/by-chat", response_model=list[int])
 async def list_by_chat(
     chat_id: int = Query(..., description="ID чата"),
     limit: int | None = Query(None, ge=1, description="необязательный лимит"),
@@ -92,5 +73,5 @@ async def list_by_chat(
         logger.info(f"[GET /memberships/by-chat] chat_id={chat_id}, limit={limit}, offset={offset}, rows={len(rows)}")
         return rows
     except Exception as e:
-        logger.error(f"[GET /memberships/by-chat] Ошибка: chat_id={chat_id}, ошибка={e}")
+        logger.error(f"[GET /memberships/by-chat] Ошибка: chat_id={chat_id}, ошибка={e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при получении списка мемберств")

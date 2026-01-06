@@ -1,5 +1,5 @@
 # src/schemas.py
-# commit: удалены все схемы для legacy-моделей (settings/subscriptions/broadcasts/ads/audiences/deliveries/scheduled_announcements/random branches)
+# commit: подготовка к варианту A: добавлены Out-схемы с id, сохранена совместимость с текущими In-схемами
 
 from datetime import datetime
 from typing import Optional
@@ -7,42 +7,69 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 
-class ChatModel(BaseModel):
+# ─────────────────────────────
+# Base / common
+# ─────────────────────────────
+
+class ORMBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ─────────────────────────────
+# Chats
+# ─────────────────────────────
+
+class ChatOut(ORMBase):
     id: int
     title: str
     type: str
     added_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
+
+# Backward-compatible name (если где-то уже импортируется ChatModel)
+class ChatModel(ChatOut):
+    pass
 
 
-class UserModel(BaseModel):
+# ─────────────────────────────
+# Users
+# ─────────────────────────────
+
+class UserIn(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
     terms_accepted: Optional[bool] = None
 
-    model_config = ConfigDict(from_attributes=True)
+
+# Backward-compatible name (в проекте часто UserModel используют как input)
+class UserModel(UserIn):
+    pass
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(UserIn):
+    pass
+
+
+class UserOut(ORMBase):
+    id: int
     username: Optional[str] = None
     full_name: Optional[str] = None
-    terms_accepted: Optional[bool] = None
-
-    model_config = ConfigDict(from_attributes=True)
+    terms_accepted: bool
 
 
-class InviteLinkIn(BaseModel):
+# ─────────────────────────────
+# Invite links
+# ─────────────────────────────
+
+class InviteLinkIn(ORMBase):
     user_id: int
     chat_id: int
     invite_link: str
     created_at: datetime
     expires_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
 
-
-class InviteLinkModel(BaseModel):
+class InviteLinkOut(ORMBase):
     id: int
     user_id: int
     chat_id: int
@@ -50,29 +77,51 @@ class InviteLinkModel(BaseModel):
     created_at: datetime
     expires_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+
+# Backward-compatible name
+class InviteLinkModel(InviteLinkOut):
+    pass
 
 
-class AlgorithmProgressModel(BaseModel):
+# ─────────────────────────────
+# Algorithm progress
+# ─────────────────────────────
+
+class AlgorithmProgressOut(ORMBase):
     user_id: int
     current_step: int
     basic_completed: bool
     advanced_completed: bool
     updated_at: Optional[datetime] = None
 
-    model_config = ConfigDict(from_attributes=True)
 
+# Backward-compatible name
+class AlgorithmProgressModel(AlgorithmProgressOut):
+    pass
+
+
+# ─────────────────────────────
+# Links
+# ─────────────────────────────
 
 class LinkVisitIn(BaseModel):
     link_key: str
 
-    model_config = ConfigDict(from_attributes=True)
+
+class LinkOut(ORMBase):
+    id: int
+    link_key: str
+    resource: Optional[str] = None
+    visits: int
+    created_at: datetime
 
 
-class UserWithChatModel(BaseModel):
+# ─────────────────────────────
+# Mixed
+# ─────────────────────────────
+
+class UserWithChatModel(ORMBase):
     username: Optional[str] = None
     full_name: Optional[str] = None
     terms_accepted: Optional[bool] = None
     chat_id: int
-
-    model_config = ConfigDict(from_attributes=True)

@@ -1,15 +1,16 @@
 # src/main.py
-# commit: убраны scheduler и несуществующие роутеры; оставлен только актуальный роутинг + обработчики ошибок
+# commit: централизована защита API key на уровне include_router; health оставлен публичным
 
 import logging
 from builtins import BaseExceptionGroup
 from contextlib import asynccontextmanager
 
 import src.logger  # noqa: F401  (конфиг логгера и TelegramHandler)
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Security
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError
+from src.security import get_api_key
 
 from src.database import engine, init_db
 from src.exceptions import (
@@ -18,8 +19,8 @@ from src.exceptions import (
     register_exception_handlers,
 )
 from src.middleware import SuppressRootAccessLogMiddleware
+from src.security import get_api_key
 from src.routers import algorithm, chats, health, invite_links, links, memberships, users
-
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -63,10 +64,15 @@ async def catch_all_exceptions(request: Request, call_next):
         return await handle_global_exception(request, exc)
 
 
-app.include_router(chats.router)
-app.include_router(users.router)
-app.include_router(memberships.router)
-app.include_router(invite_links.router)
-app.include_router(algorithm.router)
-app.include_router(links.router)
+# Публичные эндпоинты (без ключа)
 app.include_router(health.router)
+
+# Закрытые эндпоинты (требуют X-API-KEY)
+secured = [Security(get_api_key)]
+
+app.include_router(chats.router, dependencies=secured)
+app.include_router(users.router, dependencies=secured)
+app.include_router(memberships.router, dependencies=secured)
+app.include_router(invite_links.router, dependencies=secured)
+app.include_router(algorithm.router, dependencies=secured)
+app.include_router(links.router, dependencies=secured)

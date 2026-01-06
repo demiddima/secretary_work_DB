@@ -1,7 +1,9 @@
 # src/routers/health.py
+# commit: упрощение и стабилизация health-эндпоинтов; контракты ответов без изменений
+
+import logging
 
 from fastapi import APIRouter, HTTPException
-import logging
 
 router = APIRouter(tags=["health"])
 logger = logging.getLogger(__name__)
@@ -11,11 +13,10 @@ logger = logging.getLogger(__name__)
 async def root():
     try:
         response = {"status": "ok"}
-        # Логируем только важный выход: статус сервиса
         logger.info(f"[GET /] Статус сервиса: {response}")
         return response
     except Exception as e:
-        logger.error(f"[GET /] Ошибка при проверке статуса сервиса: {e}")
+        logger.error(f"[GET /] Ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при проверке статуса сервиса")
 
 
@@ -23,20 +24,17 @@ async def root():
 async def health():
     try:
         response = {"status": "healthy"}
-        # Логируем только важный выход: статус здоровья системы
         logger.info(f"[GET /health] Статус здоровья: {response}")
         return response
     except Exception as e:
-        logger.error(f"[GET /health] Ошибка при проверке состояния: {e}")
+        logger.error(f"[GET /health] Ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при проверке состояния системы")
 
 
 @router.get("/panic")
 async def panic():
     try:
-        # Здесь намеренно генерируем ошибку для теста
         raise RuntimeError("🔥 Это тестовый RuntimeError")
     except RuntimeError as e:
-        # Логируем только ошибку
-        logger.error(f"[GET /panic] Ошибка: {e}")
+        logger.error(f"[GET /panic] Ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")

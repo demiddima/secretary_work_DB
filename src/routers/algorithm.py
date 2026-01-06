@@ -1,112 +1,80 @@
-# commit: уточнены тексты логов — теперь они поясняют, что именно произошло
+# src/routers/algorithm.py
+# commit: вариант A — роутер переведён на CRUD.get_progress (ORM) вместо разрозненных get_user_step/get_basic...; response_model = AlgorithmProgressModel
+
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
-from datetime import datetime
 
-from src.schemas import AlgorithmProgressModel
-from src.dependencies import get_session
 from src import crud
+from src.dependencies import get_session
+from src.schemas import AlgorithmProgressModel
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/algo", tags=["algorithm"])
+
 
 @router.get("/{user_id}", response_model=AlgorithmProgressModel)
 async def get_user_progress(user_id: int, session: AsyncSession = Depends(get_session)):
     try:
-        step = await crud.get_user_step(session, user_id=user_id)
-        basic = await crud.get_basic_completed(session, user_id=user_id)
-        advanced = await crud.get_advanced_completed(session, user_id=user_id)
-        updated_at = None  # можно добавить через отдельный CRUD-метод
+        obj = await crud.get_progress(session, user_id=user_id)
+        if obj is None:
+            response = AlgorithmProgressModel(
+                user_id=user_id,
+                current_step=0,
+                basic_completed=False,
+                advanced_completed=False,
+                updated_at=None,
+            )
+            logger.info(f"[{user_id}] GET /algo/{user_id} — прогресс отсутствует, отдаём дефолт")
+            return response
 
-        response = AlgorithmProgressModel(
-            user_id=user_id,
-            current_step=step or 0,
-            basic_completed=basic or False,
-            advanced_completed=advanced or False,
-            updated_at=updated_at
-        )
-        logger.info(
-            f"[{user_id}] GET /algo/{user_id} — возвращаем прогресс пользователя: "
-            f"текущий шаг={response.current_step}, basic_completed={response.basic_completed}, "
-            f"advanced_completed={response.advanced_completed}, updated_at={response.updated_at}"
-        )
-        return response
-
+        logger.info(f"[{user_id}] GET /algo/{user_id} — прогресс найден")
+        return obj
     except Exception as e:
-        logger.error(
-            f"[{user_id}] GET /algo/{user_id} — не удалось получить прогресс пользователя: {e}",
-            exc_info=True
-        )
+        logger.error(f"[{user_id}] GET /algo/{user_id} — ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при получении прогресса пользователя")
 
 
-@router.put("/{user_id}/step", response_model=None)
+@router.put("/{user_id}/step", response_model=dict)
 async def set_user_step(user_id: int, step: int, session: AsyncSession = Depends(get_session)):
     try:
         await crud.set_user_step(session, user_id=user_id, step=step)
-        logger.info(f"[{user_id}] PUT /algo/{user_id}/step — установлен текущий шаг пользователя: {step}")
+        logger.info(f"[{user_id}] PUT /algo/{user_id}/step — step={step}")
         return {"ok": True}
-
     except Exception as e:
-        logger.error(
-            f"[{user_id}] PUT /algo/{user_id}/step — не удалось установить шаг пользователя: {e}",
-            exc_info=True
-        )
+        logger.error(f"[{user_id}] PUT /algo/{user_id}/step — ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при обновлении шага пользователя")
 
 
-@router.put("/{user_id}/basic", response_model=None)
+@router.put("/{user_id}/basic", response_model=dict)
 async def set_basic_completed(user_id: int, completed: bool, session: AsyncSession = Depends(get_session)):
     try:
         await crud.set_basic_completed(session, user_id=user_id, completed=completed)
-        logger.info(
-            f"[{user_id}] PUT /algo/{user_id}/basic — флаг basic_completed "
-            f"{'установлен' if completed else 'снят'}"
-        )
+        logger.info(f"[{user_id}] PUT /algo/{user_id}/basic — completed={completed}")
         return {"ok": True}
-
     except Exception as e:
-        logger.error(
-            f"[{user_id}] PUT /algo/{user_id}/basic — не удалось обновить статус basic: {e}",
-            exc_info=True
-        )
+        logger.error(f"[{user_id}] PUT /algo/{user_id}/basic — ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при обновлении статуса basic пользователя")
 
 
-@router.put("/{user_id}/advanced", response_model=None)
+@router.put("/{user_id}/advanced", response_model=dict)
 async def set_advanced_completed(user_id: int, completed: bool, session: AsyncSession = Depends(get_session)):
     try:
         await crud.set_advanced_completed(session, user_id=user_id, completed=completed)
-        logger.info(
-            f"[{user_id}] PUT /algo/{user_id}/advanced — флаг advanced_completed "
-            f"{'установлен' if completed else 'снят'}"
-        )
+        logger.info(f"[{user_id}] PUT /algo/{user_id}/advanced — completed={completed}")
         return {"ok": True}
-
     except Exception as e:
-        logger.error(
-            f"[{user_id}] PUT /algo/{user_id}/advanced — не удалось обновить статус advanced: {e}",
-            exc_info=True
-        )
+        logger.error(f"[{user_id}] PUT /algo/{user_id}/advanced — ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при обновлении статуса advanced пользователя")
 
 
-@router.delete("/{user_id}", response_model=None)
+@router.delete("/{user_id}", response_model=dict)
 async def clear_user_data(user_id: int, session: AsyncSession = Depends(get_session)):
     try:
         await crud.clear_user_data(session, user_id=user_id)
-        logger.info(
-            f"[{user_id}] DELETE /algo/{user_id} — очищен прогресс пользователя: "
-            f"удалены текущий шаг, basic_completed, advanced_completed"
-        )
+        logger.info(f"[{user_id}] DELETE /algo/{user_id} — прогресс очищен")
         return {"ok": True}
-
     except Exception as e:
-        logger.error(
-            f"[{user_id}] DELETE /algo/{user_id} — не удалось очистить данные пользователя: {e}",
-            exc_info=True
-        )
+        logger.error(f"[{user_id}] DELETE /algo/{user_id} — ошибка: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Ошибка при очистке данных пользователя")
