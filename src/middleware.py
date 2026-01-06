@@ -21,6 +21,26 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         ua = request.headers.get("user-agent", "-")
         ct = request.headers.get("content-type", "-")
+        host = request.headers.get("host", "-")
+        xff = request.headers.get("x-forwarded-for", "-")
+        real_ip = request.headers.get("x-real-ip", "-")
+
+        client_ip = "-"
+        if request.client:
+            client_ip = request.client.host
+
         resp: Response = await call_next(request)
-        log.info("%s %s -> %s | ua=%r | ct=%r", request.method, request.url.path, resp.status_code, ua, ct)
+
+        log.info(
+            "%s %s -> %s | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r",
+            request.method,
+            request.url.path,
+            resp.status_code,
+            client_ip,
+            xff,
+            real_ip,
+            host,
+            ua,
+            ct,
+        )
         return resp
