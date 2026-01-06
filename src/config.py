@@ -1,45 +1,57 @@
 # src/config.py
+# commit: нормализация настроек пула + стабилизация imports для pydantic_settings
 
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # Database
-    DB_HOST: str = Field(..., env="DB_HOST")
-    DB_PORT: int = Field(3306, env="DB_PORT")  # MySQL по умолчанию
-    DB_USER: str = Field(..., env="DB_USER")
-    DB_PASSWORD: str = Field(..., env="DB_PASSWORD")
-    DB_NAME: str = Field(..., env="DB_NAME")
+    DB_HOST: str = Field(..., validation_alias="DB_HOST")
+    DB_PORT: int = Field(3306, validation_alias="DB_PORT")
+    DB_USER: str = Field(..., validation_alias="DB_USER")
+    DB_PASSWORD: str = Field(..., validation_alias="DB_PASSWORD")
+    DB_NAME: str = Field(..., validation_alias="DB_NAME")
 
-    # Параметры пула (новые имена — предпочтительны)
-    POOL_SIZE: int = Field(10, env="POOL_SIZE")
-    MAX_OVERFLOW: int = Field(20, env="MAX_OVERFLOW")
-    POOL_TIMEOUT: int = Field(30, env="POOL_TIMEOUT")       # секунды
-    POOL_RECYCLE: int = Field(1800, env="POOL_RECYCLE")     # секунды
+    # Pool (предпочтительные имена)
+    POOL_SIZE: int = Field(10, validation_alias="POOL_SIZE")
+    MAX_OVERFLOW: int = Field(20, validation_alias="MAX_OVERFLOW")
+    POOL_TIMEOUT: int = Field(30, validation_alias="POOL_TIMEOUT")   # seconds
+    POOL_RECYCLE: int = Field(1800, validation_alias="POOL_RECYCLE")  # seconds
 
-    # Совместимость со старыми именами
-    POOL_MIN_SIZE: int | None = Field(None, env="POOL_MIN_SIZE")
-    POOL_MAX_SIZE: int | None = Field(None, env="POOL_MAX_SIZE")
+    # Legacy совместимость
+    POOL_MIN_SIZE: int | None = Field(None, validation_alias="POOL_MIN_SIZE")
+    POOL_MAX_SIZE: int | None = Field(None, validation_alias="POOL_MAX_SIZE")
 
-    # Прочее
-    TELEGRAM_BOT_TOKEN: str = Field(..., env="TELEGRAM_BOT_TOKEN")
-    LOG_CHANNEL_ID: int = Field(..., env="LOG_CHANNEL_ID")
+    # Logging / Telegram
+    TELEGRAM_BOT_TOKEN: str = Field(..., validation_alias="TELEGRAM_BOT_TOKEN")
+    LOG_CHANNEL_ID: int = Field(..., validation_alias="LOG_CHANNEL_ID")
 
-    JWT_SECRET_KEY: str = Field(..., env="JWT_SECRET_KEY")
-    API_KEY_VALUE: str = Field(..., env="API_KEY_VALUE")
+    # Auth
+    JWT_SECRET_KEY: str = Field(..., validation_alias="JWT_SECRET_KEY")
+    API_KEY_VALUE: str = Field(..., validation_alias="API_KEY_VALUE")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @staticmethod
+    def _safe_int(value: int | None, fallback: int) -> int:
+        if value is None:
+            return int(fallback)
+        return int(value)
 
     @property
     def resolved_pool_size(self) -> int:
-        return int(self.POOL_MIN_SIZE) if self.POOL_MIN_SIZE not in (None, 0) else int(self.POOL_SIZE)
+        v = self._safe_int(self.POOL_MIN_SIZE, self.POOL_SIZE)
+        return max(0, v)
 
     @property
     def resolved_max_overflow(self) -> int:
-        return int(self.POOL_MAX_SIZE) if self.POOL_MAX_SIZE not in (None, 0) else int(self.MAX_OVERFLOW)
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+        v = self._safe_int(self.POOL_MAX_SIZE, self.MAX_OVERFLOW)
+        return max(0, v)
 
 
 settings = Settings()

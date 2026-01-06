@@ -69,14 +69,6 @@ def algorithm_progress_to_dict(p) -> Dict[str, Any]:
     }
 
 
-def setting_to_dict(s) -> Dict[str, Any]:
-    return {
-        "id": s.id,
-        "value": s.value,
-        "updated_at": s.updated_at,
-    }
-
-
 def link_to_dict(l) -> Dict[str, Any]:
     return {
         "id": l.id,
@@ -84,17 +76,6 @@ def link_to_dict(l) -> Dict[str, Any]:
         "resource": l.resource,
         "visits": l.visits,
         "created_at": l.created_at,
-    }
-
-
-def scheduled_announcement_to_dict(announcement) -> Dict[str, Any]:
-    return {
-        "id": announcement.id,
-        "name": announcement.name,
-        "chat_id": announcement.chat_id,
-        "thread_id": announcement.thread_id,
-        "schedule": announcement.schedule,
-        "last_message_id": announcement.last_message_id,
     }
 
 
@@ -109,92 +90,3 @@ def user_subscription_to_dict(s) -> Dict[str, Any]:
         "created_at": getattr(s, "created_at", None),
         "updated_at": getattr(s, "updated_at", None),
     }
-
-
-def broadcast_to_dict(b) -> Dict[str, Any]:
-    if b is None:
-        return {}
-    return {
-        "id": b.id,
-        "kind": b.kind,
-        "title": b.title,
-        "content": b.content,
-        "status": b.status,
-        "schedule": getattr(b, "schedule", None),
-        "enabled": bool(getattr(b, "enabled", True)),
-        "created_by": b.created_by,
-        "created_at": b.created_at,
-        "updated_at": b.updated_at,
-    }
-
-
-def broadcast_target_to_dict(t) -> Dict[str, Any]:
-    if t is None:
-        return {}
-    return {
-        "id": t.id,
-        "broadcast_id": t.broadcast_id,
-        "type": t.type,  # 'ids' | 'sql' | 'kind'
-        "user_ids": t.user_ids_json,
-        "sql": t.sql_text,
-        "kind": t.kind,
-        "created_at": t.created_at,
-    }
-
-
-def delivery_to_dict(d) -> Dict[str, Any]:
-    if d is None:
-        return {}
-    return {
-        "id": d.id,
-        "broadcast_id": d.broadcast_id,
-        "user_id": d.user_id,
-        "status": d.status,          # 'pending' | 'sent' | 'failed' | 'skipped'
-        "attempts": d.attempts,
-        "error_code": d.error_code,
-        "error_message": d.error_message,
-        "message_id": d.message_id,
-        "sent_at": d.sent_at,
-        "created_at": d.created_at,
-    }
-    
-    
-def ad_to_dict(ad) -> Dict[str, Any]:
-    if ad is None:
-        return {}
-    return {
-        "id": ad.id,
-        "title": ad.title,
-        "chat_id": ad.chat_id,
-        "thread_id": ad.thread_id,
-        "content": ad.content_json,
-        "schedule_type": ad.schedule_type,
-        "schedule_cron": ad.schedule_cron,
-        "n_days_start_date": ad.n_days_start_date,
-        "n_days_time": ad.n_days_time,
-        "n_days_interval": ad.n_days_interval,
-        "enabled": bool(ad.enabled),
-        "delete_previous": bool(ad.delete_previous),
-        "dedupe_minute": bool(ad.dedupe_minute),
-        "auto_delete_ttl_hours": ad.auto_delete_ttl_hours,
-        "auto_delete_cron": ad.auto_delete_cron,
-        "last_message_id": ad.last_message_id,
-        "created_by": ad.created_by,
-        "created_at": ad.created_at,
-        "updated_at": ad.updated_at,
-    }
-
-
-def random_branch_to_dict(b) -> Dict[str, Any]:
-    if b is None:
-        return {}
-    return {
-        "id": b.id,
-        "chat_id": b.chat_id,
-        "thread_id": b.thread_id,
-        "window_from": b.window_from,
-        "window_to": b.window_to,
-        "rebuild_time": b.rebuild_time,
-        "enabled": bool(b.enabled),
-    }
-    

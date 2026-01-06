@@ -1,7 +1,4 @@
-from .broadcasts import router as broadcasts_router
-from .audiences import router as audiences_router
+# src/routers/__init__.py
+# commit: удалены legacy-роутеры (broadcasts/audiences); файл оставлен пустым для совместимости импорта пакета
 
-__all__ = [
-    "broadcasts_router",
-    "audiences_router",
-]
+__all__: list[str] = []
