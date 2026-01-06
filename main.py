@@ -19,8 +19,10 @@ from src.exceptions import (
     register_exception_handlers,
 )
 from src.middleware import SuppressRootAccessLogMiddleware
+from src.middleware import RequestLogMiddleware
 from src.security import get_api_key
 from src.routers import algorithm, chats, health, invite_links, links, memberships, users
+
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -70,6 +72,8 @@ app.include_router(health.router)
 # Закрытые эндпоинты (требуют X-API-KEY)
 secured = [Security(get_api_key)]
 
+app.add_middleware(SuppressRootAccessLogMiddleware)
+app.add_middleware(RequestLogMiddleware)
 app.include_router(chats.router, dependencies=secured)
 app.include_router(users.router, dependencies=secured)
 app.include_router(memberships.router, dependencies=secured)
