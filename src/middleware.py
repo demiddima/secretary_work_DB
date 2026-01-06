@@ -3,6 +3,7 @@ from starlette.responses import Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import PlainTextResponse
 import logging
+import time
 
 
 log = logging.getLogger("http.requests")
@@ -19,33 +20,29 @@ class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
 
 class RequestLogMiddleware(BaseHTTPMiddleware):
     """
-    Логирует ТОЛЬКО полезное (чтобы не было дубля с бизнес-логами):
-
-    Пишем в лог, если:
-      - 404/405 (маршрут/метод не существует),
-      - любой 4xx/5xx,
-      - (опционально) "медленный" запрос (по порогу slow_ms).
-
-    Успешные 2xx по существующим роутам не логируем.
+    Логирует только полезные запросы (чтобы не было дубля с бизнес-логами):
+    - 404/405 (нет маршрута / метод не разрешён)
+    - любой 4xx/5xx
+    - медленные запросы (>= slow_ms)
+    Успешные 2xx по существующим роутам не логируются.
     """
 
     def __init__(self, app, *, slow_ms: int = 700, log_ok: bool = False):
         super().__init__(app)
         self.slow_ms = int(slow_ms)
-        self.log_ok = bool(log_ok)  # если захочешь включить логирование 2xx вручную
+        self.log_ok = bool(log_ok)
 
     async def dispatch(self, request: Request, call_next):
         start = time.monotonic()
 
+        # Собираем мету — максимально безопасно
         ua = request.headers.get("user-agent", "-")
         ct = request.headers.get("content-type", "-")
         host = request.headers.get("host", "-")
         xff = request.headers.get("x-forwarded-for", "-")
         xri = request.headers.get("x-real-ip", "-")
-
         client_ip = request.client.host if request.client else "-"
 
-        # “реальный” ip: сначала X-Real-IP, потом первый из XFF, иначе client_ip
         if xri and xri != "-":
             rip = xri
         elif xff and xff != "-":
@@ -57,6 +54,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             resp: Response = await call_next(request)
         except Exception:
             dur_ms = int((time.monotonic() - start) * 1000)
+            # Важно: middleware не должен ломать ответ — просто залогируем и пробросим
             log.exception(
                 "%s %s -> EXC | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r | %sms",
                 request.method,
@@ -74,7 +72,7 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         dur_ms = int((time.monotonic() - start) * 1000)
         status = resp.status_code
 
-        # Если роут не сматчился, FastAPI/Starlette обычно не ставят endpoint в scope
+        # Если роут не сматчился, endpoint обычно None
         endpoint = request.scope.get("endpoint")
         route_missing = endpoint is None
 
@@ -83,28 +81,31 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         is_slow = dur_ms >= self.slow_ms
         is_ok = 200 <= status < 300
 
-        # Основная логика: логируем только "аномалии"
         should_log = (
             is_404_405
             or is_error
             or is_slow
             or (self.log_ok and is_ok)
-            or (route_missing and not is_ok)  # на всякий случай
+            or (route_missing and not is_ok)
         )
 
         if should_log:
-            log.info(
-                "%s %s -> %s | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r | %sms",
-                request.method,
-                request.url.path,
-                status,
-                client_ip,
-                xff,
-                rip,
-                host,
-                ua,
-                ct,
-                dur_ms,
-            )
+            # Защита: даже если логгер/форматирование упадут — НЕ ломаем запрос
+            try:
+                log.info(
+                    "%s %s -> %s | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r | %sms",
+                    request.method,
+                    request.url.path,
+                    status,
+                    client_ip,
+                    xff,
+                    rip,
+                    host,
+                    ua,
+                    ct,
+                    dur_ms,
+                )
+            except Exception:
+                pass
 
         return resp
