@@ -72,8 +72,8 @@ app.include_router(health.router)
 # Закрытые эндпоинты (требуют X-API-KEY)
 secured = [Security(get_api_key)]
 
-app.add_middleware(SuppressRootAccessLogMiddleware)
 app.add_middleware(RequestLogMiddleware)
+app.add_middleware(SuppressRootAccessLogMiddleware)
 app.include_router(chats.router, dependencies=secured)
 app.include_router(users.router, dependencies=secured)
 app.include_router(memberships.router, dependencies=secured)

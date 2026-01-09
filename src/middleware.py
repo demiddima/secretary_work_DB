@@ -1,229 +1,135 @@
-from __future__ import annotations
-
 import logging
 import re
-import time
-from typing import Optional, Tuple
-
 from fastapi import Request
 from fastapi.responses import PlainTextResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from starlette.routing import Match
 
-
 log = logging.getLogger("http.requests")
 
 
-# --- анти-спам для логов (в памяти процесса) ---
-_RATE: dict[str, dict[str, float | int]] = {}
-_RATE_WINDOW_SEC = 60.0     # окно агрегации
-_RATE_MAX_LOGS = 2          # сколько строк логировать на сигнатуру в окно
+# --- Быстрые фильтры мусора (сканеры/боты) ---
 
+# Методы, которые тебе почти наверняка не нужны в API.
+_BLOCK_METHODS = {"PROPFIND", "TRACE", "TRACK", "CONNECT"}
 
-def _rate_allow(signature: str) -> Tuple[bool, int]:
-    """
-    Анти-спам: ограничивает число одинаковых логов (по сигнатуре) в минуту.
-    Возвращает: (можно_логировать_сейчас, сколько_подавлено_в_прошлом_окне)
-    """
-    now = time.monotonic()
-    st = _RATE.get(signature)
+# Паттерны путей, которые почти всегда являются сканом/эксплойтом.
+# Можно дополнять по логам.
+_BLOCK_PATH_RE = re.compile(
+    r"(?i)("
+    r"wp-|wordpress|wp-includes|wp-content|wp-admin|xmlrpc\.php|"
+    r"\.php($|/)|"
+    r"\.env($|/)|\.git($|/)|"
+    r"cgi-bin|"
+    r"owa/|autodiscover|"
+    r"actuator|"
+    r"/sdk/|^/sdk|"
+    r"/\.well-known/|"
+    r"phpmyadmin|"
+    r"server-status"
+    r")"
+)
 
-    if st is None or now >= float(st["reset_at"]):
-        suppressed_prev = int(st["suppressed"]) if st else 0
-        _RATE[signature] = {"reset_at": now + _RATE_WINDOW_SEC, "count": 1, "suppressed": 0}
-        return True, suppressed_prev
-
-    if int(st["count"]) < _RATE_MAX_LOGS:
-        st["count"] = int(st["count"]) + 1
-        return True, 0
-
-    st["suppressed"] = int(st["suppressed"]) + 1
-    return False, 0
-
-
-def _extract_real_ip(request: Request) -> str:
-    """
-    Пытается корректно определить IP клиента:
-    1) X-Forwarded-For (первый IP)
-    2) X-Real-IP
-    3) request.client.host
-    """
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        first = xff.split(",")[0].strip()
-        if first:
-            return first
-
-    rip = request.headers.get("x-real-ip", "").strip()
-    if rip:
-        return rip
-
-    if request.client:
-        return request.client.host
-
-    return "-"
+# User-Agent, которые часто встречаются у сканеров.
+# (не обязателен, но помогает)
+_BLOCK_UA_RE = re.compile(r"(?i)(zgrab|masscan|nmap|sqlmap|acunetix)")
 
 
 def _is_known_route(request: Request) -> bool:
     """
-    Проверяет, известен ли маршрут приложению (включая path params).
+    Возвращает True, если запрос (path+method) совпал с одним из зарегистрированных роутов приложения.
     """
     scope = request.scope
     app = request.app
-
-    # request.app.routes — есть и в FastAPI, и в Starlette
-    for route in getattr(app, "routes", []):
-        try:
-            match, _ = route.matches(scope)
-        except Exception:
-            continue
-        if match in (Match.FULL, Match.PARTIAL):
+    for route in getattr(app.router, "routes", []):
+        match, _ = route.matches(scope)
+        if match == Match.FULL:
             return True
     return False
 
 
-_WORDPRESS_RE = re.compile(
-    r"(^/wp-|/wp-includes/|/wp-content/|/wp-admin/|xmlrpc\.php|wp-login\.php)",
-    re.IGNORECASE,
-)
-_PHP_RE = re.compile(r"\.php($|[/?#])", re.IGNORECASE)
-
-
-def _scan_signature(method: str, path: str, host: str) -> Optional[str]:
+def _should_drop_silently(request: Request) -> bool:
     """
-    Возвращает сигнатуру скана/прокси-чека, если похоже на мусор.
+    True => считаем запрос мусором и режем без логирования.
     """
-    m = method.upper()
+    method = request.method.upper()
+    path = request.url.path or "/"
+    ua = (request.headers.get("user-agent") or "").strip()
 
-    # Proxy-check (очень характерно)
-    if m == "CONNECT":
-        return "scan:proxy_connect"
+    # 1) странные методы (WebDAV/пробники/прокси)
+    if method in _BLOCK_METHODS:
+        return True
 
-    # Host не твой — часто proxy-check
-    # Разрешим твои варианты: ludoch.site, *.twc1.net и прямой IP
-    host_only = host.split(":")[0].strip().lower()
-    if host_only and not (
-        host_only == "ludoch.site"
-        or host_only.endswith(".twc1.net")
-        or host_only == "78.40.217.74"
-    ):
-        # Например: host='api.ipify.org'
-        return "scan:foreign_host"
+    # 2) явные эксплойт-пути
+    if _BLOCK_PATH_RE.search(path):
+        return True
 
-    # Двойной слэш в пути — тоже часто proxy-check
-    if path.startswith("//"):
-        return "scan:double_slash"
+    # 3) подозрительный UA (опционально)
+    if ua and _BLOCK_UA_RE.search(ua):
+        return True
 
-    # WordPress / PHP-webshell сканы
-    if _WORDPRESS_RE.search(path):
-        return "scan:wordpress"
-    if _PHP_RE.search(path) or "/uploads/" in path or "/tmp/" in path or "/test/" in path:
-        return "scan:php_probe"
+    # 4) двойные слэши часто у мусора типа //api.ipify.org/
+    if "//" in path:
+        return True
 
-    return None
+    return False
 
 
 class SuppressRootAccessLogMiddleware(BaseHTTPMiddleware):
     """
-    Мгновенно отвечает на GET / (OK).
-    Используй, если какие-то внешние мониторинги долбят корень.
+    1) GET / -> мгновенно "OK" (без лишней нагрузки)
+    2) Мусор/скан -> 404 без логов
+    3) Неизвестные роуты -> 404 без логов
     """
     async def dispatch(self, request: Request, call_next):
-        if request.method == "GET" and request.url.path == "/":
+        path = request.url.path or "/"
+
+        # Корневой "healthcheck" — часто дергают роботы/балансер/ты сам.
+        if request.method.upper() == "GET" and path == "/":
             return PlainTextResponse("OK", status_code=200)
+
+        # Сканеры режем сразу и тихо.
+        if _should_drop_silently(request):
+            return PlainTextResponse("Not Found", status_code=404)
+
+        # Любой неизвестный роут — тоже тихо режем (это главный "пылесос" логов).
+        if not _is_known_route(request):
+            return PlainTextResponse("Not Found", status_code=404)
+
         return await call_next(request)
 
 
 class RequestLogMiddleware(BaseHTTPMiddleware):
     """
-    Логирует только то, что реально важно:
-    - подозрительные сканы/прокси-чеки
-    - ошибки (4xx/5xx)
-    - неизвестные маршруты
-    Всё остальное (нормальные 200 по твоим API) НЕ логирует, чтобы не было дублей.
+    Логирует только ПРОБЛЕМЫ по вашим реальным эндпоинтам:
+    - 4xx/5xx (401/422/500 и т.п.)
+    Успешные 2xx не логируются, чтобы не дублировать логи хендлеров.
     """
     async def dispatch(self, request: Request, call_next):
-        start = time.monotonic()
-
-        method = request.method
-        path = request.url.path
-
-        # Не логируем корень (и не трогаем его)
-        if method == "GET" and path == "/":
-            return await call_next(request)
-
         ua = request.headers.get("user-agent", "-")
         ct = request.headers.get("content-type", "-")
         host = request.headers.get("host", "-")
         xff = request.headers.get("x-forwarded-for", "-")
-        rip_hdr = request.headers.get("x-real-ip", "-")
-        real_ip = _extract_real_ip(request)
+        real_ip = request.headers.get("x-real-ip", "-")
 
-        sig = _scan_signature(method, path, host)
+        client_ip = request.client.host if request.client else "-"
 
-        # Если это явно прокси-чек — режем сразу, даже не отдаём в роутер
-        if sig == "scan:proxy_connect":
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            allow, suppressed_prev = _rate_allow(sig)
-            if suppressed_prev:
-                log.info("[scan] %s (suppressed %d in last %ds)", sig, suppressed_prev, int(_RATE_WINDOW_SEC))
-            if allow:
-                log.info(
-                    "[scan] %s %s -> 405 | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r | %dms",
-                    method, path, real_ip, xff, rip_hdr, host, ua, ct, elapsed_ms
-                )
-            return PlainTextResponse("Method Not Allowed", status_code=405)
-
-        # Обычная обработка
         resp: Response = await call_next(request)
 
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-
-        known = _is_known_route(request)
-        status = resp.status_code
-
-        # Критерий: логируем только "интересное"
-        interesting = False
-        tag = "req"
-
-        if sig:
-            interesting = True
-            tag = "scan"
-        elif status >= 400:
-            interesting = True
-            tag = "err"
-        elif not known:
-            interesting = True
-            tag = "unknown"
-        # хочешь — можно включить медленные ответы:
-        # elif elapsed_ms >= 800:
-        #     interesting = True
-        #     tag = "slow"
-
-        if not interesting:
-            return resp
-
-        signature = sig or f"{tag}:{method}:{path}"
-
-        allow, suppressed_prev = _rate_allow(signature)
-        if suppressed_prev:
-            log.info("[%s] %s (suppressed %d in last %ds)", tag, signature, suppressed_prev, int(_RATE_WINDOW_SEC))
-
-        if allow:
+        # Логируем только ошибки
+        if resp.status_code >= 400:
             log.info(
-                "[%s] %s %s -> %s | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r | %dms",
-                tag,
-                method,
-                path,
-                status,
-                real_ip,
+                "%s %s -> %s | ip=%s | xff=%r | rip=%r | host=%r | ua=%r | ct=%r",
+                request.method,
+                request.url.path,
+                resp.status_code,
+                client_ip,
                 xff,
-                rip_hdr,
+                real_ip,
                 host,
                 ua,
                 ct,
-                elapsed_ms,
             )
 
         return resp
